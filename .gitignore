@@ -1,4 +1,5 @@
 venv_dg/
 __pycache__/
 results/
-results_csv/
+result_csv/
+result_score/

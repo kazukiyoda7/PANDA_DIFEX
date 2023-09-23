@@ -18,6 +18,8 @@ import csv
 
 from corruption.cifar10c import CIFAR10C, SplitInDataset, SplitOutDataset
 
+from panda import Net
+
 # 指定したクラス，ドメイン，深刻度のデータローダーを取得する関数
 def get_testloader(root, transform, corruption_name, severity, label):
     if corruption_name == "clean":
@@ -64,7 +66,7 @@ def get_score(model, device, train_feature_space, testloader, class_idx=0):
     with torch.no_grad():
         for (imgs, labels) in testloader:
             imgs = imgs.to(device)
-            _, features = model(imgs)
+            features = model(imgs)
             test_feature_space.append(features)
             batch_size = imgs.shape[0]
             for j in range(batch_size):
