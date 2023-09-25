@@ -1,5 +1,4 @@
-venv_dg/
 __pycache__/
-results/
-result_csv/
-result_score/
+train_results/
+eval_results/
+

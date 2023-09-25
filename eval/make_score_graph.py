@@ -1,6 +1,18 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import argparse
+from utils import fix_seed
+
+def get_args():
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('--seed', type=str, default=42)
+    args = parser.parse_args()
+    
+args = get_args()
+fix_seed(args.seed)
+    
+    
 
 corruption_list = ['clean', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'speckle_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'gaussian_blur', 'snow', 
                     'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression', 'saturate', 'spatter']

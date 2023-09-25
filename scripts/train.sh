@@ -3,7 +3,7 @@ python3 panda.py \
     --label 0 \
     --epochs 30 \
     --resnet_type 18 \
-    --output_dir results \
+    --output_dir train_results \
     --seed 42 \
     --severity 1 \
     --interval 5 \

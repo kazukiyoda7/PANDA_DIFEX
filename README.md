@@ -66,3 +66,15 @@ If you find this useful, please cite our paper:
   year={2021}
 }
 ```
+
+# ディレクトリ構造
+corruption : corruptionをかけるためのプログラムを格納したディレクトリ
+difex : pandaに追加したdifexの要素を格納したディレクトリ
+eval : 評価用のコードを格納したディレクトリ
+scripts : 実行用のpythonコードを走らせるときのコマンドを記述したコードを格納したディレクトリ
+eval_results : 評価用のコードの実行結果を格納するためのディレクトリ
+train_results : 訓練結果を格納するためのディレクトリ
+
+## その他注意点
+venv はworkspaceのvenvディレクトリ内にある
+dataルート は home のdataディレクトリを使う 
