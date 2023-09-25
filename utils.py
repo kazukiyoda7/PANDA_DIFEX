@@ -101,8 +101,8 @@ def get_loaders(dataset, label_class, batch_size, args):
             ds = torchvision.datasets.CIFAR10
             transform = transform_color
             coarse = {}
-            trainset = ds(root='../data', train=True, download=True, transform=transform, **coarse)
-            testset = ds(root='../data', train=False, download=True, transform=transform, **coarse)
+            trainset = ds(root=args.data_root, train=True, download=True, transform=transform, **coarse)
+            testset = ds(root=args.data_root, train=False, download=True, transform=transform, **coarse)
         # elif dataset == "fashion":
         #     ds = torchvision.datasets.FashionMNIST
         #     transform = transform_gray

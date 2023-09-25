@@ -7,133 +7,117 @@ from utils import fix_seed
 def get_args():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--seed', type=str, default=42)
+    parser.add_argument('--input_dir', type=str, required=True)
+    parser.add_argument('--output_dir', type=str, required=True)
+    parser.add_argument('--id_class', type=int, required=True)
     args = parser.parse_args()
+    return args
     
 args = get_args()
 fix_seed(args.seed)
-    
-    
 
 corruption_list = ['clean', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'speckle_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'gaussian_blur', 'snow', 
                     'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression', 'saturate', 'spatter']
 
 cifar10_class = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck'] 
 
-for i in range(1):
-    id_class = i
+id_class = args.id_class
 
-    for s in range(1, 6):
-        ood_class = list(filter(lambda x: x!=id_class, range(10)))
-        severity = s
+for s in range(1, 6):
+    ood_class = list(filter(lambda x: x!=id_class, range(10)))
+    severity = s
 
-        score_list = {}
+    score_list = {}
 
-        for i in ood_class:
-            path = f'result_score/resnet18/{id_class}/ood/clean_{i}.npy'
-            arr = np.load(path)
-            score_list[cifar10_class[i]] = arr
-
-
-        for k in corruption_list:
-            path = f'result_score/resnet18/{id_class}/{severity}/{k}.npy'
-            arr = np.load(path)
-            score_list[k] = arr
-            
-        # # histgram -----------------------------------------------------------
-        # plt.figure(figsize=(10, 6))
-        # # 各numpy配列のヒストグラムを描画
-        # for key in score_list.keys():
-        #     arr = score_list[key]
-        #     plt.hist(arr, bins=10, alpha=0.5, label=key, density=True)
-        # plt.title("Histograms of anomaly score")
-        # plt.xlabel("Value")
-        # plt.ylabel("Frequency")
-        # plt.legend()
-        # plt.grid(True)
-        # plt.savefig('result_score/graph_corr_class/hist.png')
+    for i in ood_class:
+        path = os.path.join(args.input_dir, f'{id_class}/ood/clean_{i}.npy')
+        arr = np.load(path)
+        score_list[cifar10_class[i]] = arr
 
 
-        # box ------------------------------------------------------------------
-        plt.figure(figsize=(10, 6))
-        data_to_plot = [score_list[key] for key in score_list.keys()]
-        plt.boxplot(data_to_plot, vert=True, patch_artist=True, labels=score_list.keys())
-        plt.title(f"Boxplot of anomaly score (ID class = {cifar10_class[id_class]})")
-        plt.ylabel("Value")
-        plt.grid(True)
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-
-        save_dir = os.path.join('result_score/graph_corr_class/', str(id_class))
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        plt.savefig(os.path.join(save_dir, f'box-severity{severity}.png'))
-
-
-        # median --------------------------------------------------------------
-        medians = [np.median(score_list[key]) for key in score_list.keys()]
-
-        plt.figure(figsize=(10, 6))
-
-        y_values = np.linspace(0, len(medians) - 1, len(medians))
-
-        # 赤い点のインデックスと青い点のインデックスを取得
-        red_indices = [i for i, txt in enumerate(score_list.keys()) if txt in corruption_list]
-        blue_indices = [i for i, txt in enumerate(score_list.keys()) if txt in cifar10_class]
-        green_indices = [i for i, txt in enumerate(score_list.keys()) if txt == 'clean']
-
-        # 赤い点をプロット
-        plt.scatter([medians[i] for i in red_indices], [y_values[i] for i in red_indices], color='red', s=100)
-        # 青い点をプロット
-        plt.scatter([medians[i] for i in blue_indices], [y_values[i] for i in blue_indices], color='skyblue', s=100)
-        # 緑の点をプロット
-        plt.scatter([medians[i] for i in green_indices], [y_values[i] for i in green_indices], color='green', s=100)
-
-        # ラベルを付ける
-        for i, txt in enumerate(score_list.keys()):
-            y_offset = 0.2 if i in red_indices else -0.2  # 赤点のラベルは上に、青点のラベルは下に配置
-            plt.annotate(txt, (medians[i], y_values[i] + y_offset), ha='center', va='bottom', rotation=0)
-
-        plt.title(f"Medians of anomaly score (ID class = {cifar10_class[id_class]})")
-        plt.xlabel("Median")
-        plt.yticks([])  # y軸の目盛りを非表示にする
-        plt.grid(axis='x')
-        plt.tight_layout()
+    for k in corruption_list:
+        path = os.path.join(args.input_dir, f'{id_class}/{severity}/{k}.npy')
+        arr = np.load(path)
+        score_list[k] = arr
         
-        save_dir = os.path.join('result_score/graph_corr_class/', str(id_class))
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        plt.savefig(os.path.join(save_dir, f'median-severity{severity}.png'))
+    save_dir = os.path.join(args.output_dir, 'graph', str(id_class))
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
-        # # mean-fix --------------------------------------------------------------
-        # means = [np.mean(score_list[key]) for key in score_list.keys()]
 
-        # plt.figure(figsize=(10, 6))
+    # box ------------------------------------------------------------------
+    plt.figure(figsize=(10, 6))
+    data_to_plot = [score_list[key] for key in score_list.keys()]
+    plt.boxplot(data_to_plot, vert=True, patch_artist=True, labels=score_list.keys())
+    plt.title(f"Boxplot of anomaly score (ID class = {cifar10_class[id_class]})")
+    plt.ylabel("Value")
+    plt.grid(True)
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f'box-severity{severity}.png'))
 
-        # y_values = np.linspace(0, len(means) - 1, len(means))
 
-        # # 赤い点のインデックスと青い点のインデックスを取得
-        # red_indices = [i for i, txt in enumerate(score_list.keys()) if txt in corruption_list]
-        # blue_indices = [i for i, txt in enumerate(score_list.keys()) if txt in cifar10_class]
-        # green_indices = [i for i, txt in enumerate(score_list.keys()) if txt == 'clean']
+    # median --------------------------------------------------------------
+    medians = [np.median(score_list[key]) for key in score_list.keys()]
 
-        # # 赤い点をプロット
-        # plt.scatter([means[i] for i in red_indices], [y_values[i] for i in red_indices], color='red', s=100)
-        # # 青い点をプロット
-        # plt.scatter([means[i] for i in blue_indices], [y_values[i] for i in blue_indices], color='skyblue', s=100)
-        # # 緑の点をプロット
-        # plt.scatter([means[i] for i in green_indices], [y_values[i] for i in green_indices], color='green', s=100)
+    plt.figure(figsize=(10, 6))
 
-        # # ラベルを付ける
-        # for i, txt in enumerate(score_list.keys()):
-        #     y_offset = 0.2 if i in red_indices else -0.2  # 赤点のラベルは上に、青点のラベルは下に配置
-        #     plt.annotate(txt, (means[i], y_values[i] + y_offset), ha='center', va='bottom', rotation=0)
+    y_values = np.linspace(0, len(medians) - 1, len(medians))
 
-        # plt.title(f"Means of anomaly score (ID class = {cifar10_class[id_class]})")
-        # plt.xlabel("Mean")
-        # plt.yticks([])  # y軸の目盛りを非表示にする
-        # plt.grid(axis='x')
-        # plt.tight_layout()
-        # plt.savefig('result_score/graph_corr_class/mean.png')
+    # 赤い点のインデックスと青い点のインデックスを取得
+    red_indices = [i for i, txt in enumerate(score_list.keys()) if txt in corruption_list]
+    blue_indices = [i for i, txt in enumerate(score_list.keys()) if txt in cifar10_class]
+    green_indices = [i for i, txt in enumerate(score_list.keys()) if txt == 'clean']
+
+    # 赤い点をプロット
+    plt.scatter([medians[i] for i in red_indices], [y_values[i] for i in red_indices], color='red', s=100)
+    # 青い点をプロット
+    plt.scatter([medians[i] for i in blue_indices], [y_values[i] for i in blue_indices], color='skyblue', s=100)
+    # 緑の点をプロット
+    plt.scatter([medians[i] for i in green_indices], [y_values[i] for i in green_indices], color='green', s=100)
+
+    # ラベルを付ける
+    for i, txt in enumerate(score_list.keys()):
+        y_offset = 0.2 if i in red_indices else -0.2  # 赤点のラベルは上に、青点のラベルは下に配置
+        plt.annotate(txt, (medians[i], y_values[i] + y_offset), ha='center', va='bottom', rotation=0)
+
+    plt.title(f"Medians of anomaly score (ID class = {cifar10_class[id_class]})")
+    plt.xlabel("Median")
+    plt.yticks([])  # y軸の目盛りを非表示にする
+    plt.grid(axis='x')
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f'median-severity{severity}.png'))
+
+    # # mean-fix --------------------------------------------------------------
+    # means = [np.mean(score_list[key]) for key in score_list.keys()]
+
+    # plt.figure(figsize=(10, 6))
+
+    # y_values = np.linspace(0, len(means) - 1, len(means))
+
+    # # 赤い点のインデックスと青い点のインデックスを取得
+    # red_indices = [i for i, txt in enumerate(score_list.keys()) if txt in corruption_list]
+    # blue_indices = [i for i, txt in enumerate(score_list.keys()) if txt in cifar10_class]
+    # green_indices = [i for i, txt in enumerate(score_list.keys()) if txt == 'clean']
+
+    # # 赤い点をプロット
+    # plt.scatter([means[i] for i in red_indices], [y_values[i] for i in red_indices], color='red', s=100)
+    # # 青い点をプロット
+    # plt.scatter([means[i] for i in blue_indices], [y_values[i] for i in blue_indices], color='skyblue', s=100)
+    # # 緑の点をプロット
+    # plt.scatter([means[i] for i in green_indices], [y_values[i] for i in green_indices], color='green', s=100)
+
+    # # ラベルを付ける
+    # for i, txt in enumerate(score_list.keys()):
+    #     y_offset = 0.2 if i in red_indices else -0.2  # 赤点のラベルは上に、青点のラベルは下に配置
+    #     plt.annotate(txt, (means[i], y_values[i] + y_offset), ha='center', va='bottom', rotation=0)
+
+    # plt.title(f"Means of anomaly score (ID class = {cifar10_class[id_class]})")
+    # plt.xlabel("Mean")
+    # plt.yticks([])  # y軸の目盛りを非表示にする
+    # plt.grid(axis='x')
+    # plt.tight_layout()
+    # plt.savefig('result_score/graph_corr_class/mean.png')
 
 
 
