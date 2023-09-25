@@ -41,39 +41,23 @@ for i in range(1):
         # plt.savefig('result_score/graph_corr_class/hist.png')
 
 
-        # # box ------------------------------------------------------------------
-        # plt.figure(figsize=(10, 6))
-        # data_to_plot = [score_list[key] for key in score_list.keys()]
-        # plt.boxplot(data_to_plot, vert=True, patch_artist=True, labels=score_list.keys())
-        # plt.title("Boxplot of anomaly score")
-        # plt.ylabel("Value")
-        # plt.grid(True)
-        # plt.xticks(rotation=90)
-        # plt.tight_layout()
-        # plt.savefig('result_score/graph_corr_class/box.png') # この行で箱ひげ図を保存します
+        # box ------------------------------------------------------------------
+        plt.figure(figsize=(10, 6))
+        data_to_plot = [score_list[key] for key in score_list.keys()]
+        plt.boxplot(data_to_plot, vert=True, patch_artist=True, labels=score_list.keys())
+        plt.title(f"Boxplot of anomaly score (ID class = {cifar10_class[id_class]})")
+        plt.ylabel("Value")
+        plt.grid(True)
+        plt.xticks(rotation=90)
+        plt.tight_layout()
+
+        save_dir = os.path.join('result_score/graph_corr_class/', str(id_class))
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        plt.savefig(os.path.join(save_dir, f'box-severity{severity}.png'))
 
 
-        # # median --------------------------------------------------------------
-        # # 中央値を抽出
-        # medians = [np.median(score_list[key]) for key in score_list.keys()]
-
-        # plt.figure(figsize=(10, 6))
-
-        # # y値として1の定数配列を使用して、すべての中央値を同じy=1の位置にプロット
-        # plt.scatter(medians, [1] * len(medians), color='skyblue', s=100)  # sはマーカーサイズ
-
-        # # ラベルを付ける
-        # for i, txt in enumerate(score_list.keys()):
-        #     plt.annotate(txt, (medians[i], 1.02), ha='center', va='bottom', rotation=90)
-
-        # plt.title("Medians of anomaly score")
-        # plt.xlabel("Median ")
-        # plt.yticks([])  # y軸の目盛りを非表示にする
-        # plt.grid(axis='x')
-        # plt.tight_layout()
-        # plt.savefig('result_score/graph_corr_class/median.png')
-
-        # median-fix --------------------------------------------------------------
+        # median --------------------------------------------------------------
         medians = [np.median(score_list[key]) for key in score_list.keys()]
 
         plt.figure(figsize=(10, 6))

@@ -3,7 +3,7 @@ import torch
 from sklearn.metrics import roc_auc_score
 import torch.optim as optim
 import argparse
-from losses import CompactnessLoss, EWCLoss
+from losses import CompactnessLoss, EWCLoss, coral
 import torch.nn.functional as F
 import utils
 from copy import deepcopy
@@ -15,6 +15,9 @@ import json
 import datetime
 import os.path as osp
 from utils import fix_seed
+
+from difex.network import common_network
+from torch import nn
 
 
 def train_model(teacher_net, student_net, train_loader, test_loader, device, args, ewc_loss):
@@ -34,8 +37,8 @@ def train_model(teacher_net, student_net, train_loader, test_loader, device, arg
     if not osp.exists(feature_save_dir):
         os.makedirs(feature_save_dir)
     for epoch in range(args.epochs):
-        running_loss = run_epoch_fix(teacher_net, student_net, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
-        print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
+        loss1, loss2, loss3, loss4 = run_epoch_fix(teacher_net, student_net, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.batch_size)
+        print('Epoch: {}, Loss1: {}, Loss2: {}, Loss3: {}, Loss4: {}'.format(epoch + 1, loss1, loss2, loss3, loss4))
         auc, feature_space = get_score(student_net, device, train_loader, test_loader)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
         if auc > best_auc:
@@ -65,7 +68,7 @@ def train_model_fourier(model, train_loader, test_loader, device, args, ewc_loss
     #     os.makedirs(model_save_dir)
     # if not osp.exists(feature_save_dir):
     #     os.makedirs(feature_save_dir)
-    for epoch in range(args.epochs):
+    for epoch in range(args.epochs_fourier):
         running_loss = run_epoch_fourier(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
         auc, feature_space = get_score(model, device, train_loader, test_loader)
@@ -87,7 +90,7 @@ def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
     for i, (imgs, _) in enumerate(train_loader):
         images = imgs.to(device)
         optimizer.zero_grad()
-        _, features = model(images)
+        features, _ = model(images)
         loss = criterion(features)
         if ewc:
             loss += ewc_loss(model)
@@ -97,28 +100,47 @@ def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
         running_loss += loss.item()
     return running_loss / (i + 1)
 
-def run_epoch_fix(teachernet, student_net, train_loader, optimizer, criterion, device, ewc, ewc_loss):
-    running_loss = 0.0
+def run_epoch_fix(teachernet, student_net, train_loader, optimizer, criterion, device, ewc, ewc_loss, batch_size):
+    running_loss1, running_loss2, running_loss3, running_loss4 = 0.0, 0.0, 0.0, 0.0
     teachernet.eval()
     for i, (imgs, _) in enumerate(train_loader):
+        
         with torch.no_grad():
             imgs = imgs.to(device)
             imgs_phase = torch.angle(torch.fft.fftn(imgs, dim=(2, 3)))
-            _, teacher_feature = teachernet(imgs_phase)
-            teacher_feature = teacher_feature.detach()
+            _, teacher_output = teachernet(imgs_phase)
+            teacher_output = teacher_output.detach()
         images = imgs.to(device)
         optimizer.zero_grad()
-        _, student_features = student_net(images)
+        student_features, student_output = student_net(images)
+        
+        x = student_features[:batch_size//2, teachernet.bottleneck_output:]
+        y = student_features[batch_size//2:, teachernet.bottleneck_output:]
+        
+        loss4 = None
+        if len(x) > 1 and len(y) > 1:
+            loss4 = coral(student_features[:batch_size//2, teachernet.bottleneck_output:], student_features[batch_size//2:, teachernet.bottleneck_output:])*args.theta
+        
         loss1 = criterion(student_features)
-        loss2 = F.mse_loss(teacher_feature, student_features)
-        loss = loss1 + loss2*0.1
+        loss2 = F.mse_loss(teacher_output, student_output[:, :256])*args.alpha
+        loss3 = -F.mse_loss(student_output[:, :teachernet.bottleneck_output], student_output[:, teachernet.bottleneck_output:])*args.beta
+        
+        if loss4 is not None:
+            loss = loss1 + loss2 + loss3 + loss4
+        else:
+            loss = loss1 + loss2 + loss3
+        
         if ewc:
             loss += ewc_loss(student_features)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(student_net.parameters(), 1e-3)
         optimizer.step()
-        running_loss += loss.item()
-    return running_loss / (i + 1)
+        running_loss1 += loss1.item()
+        running_loss2 += loss2.item()
+        running_loss3 += loss3.item()
+        if loss4 is not None:
+            running_loss4 += loss4.item()
+    return running_loss1/(i+1), running_loss2/(i+1), running_loss3/(i+1), running_loss4/(i+1)
 
 def run_epoch_fourier(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
     running_loss = 0.0
@@ -126,7 +148,7 @@ def run_epoch_fourier(model, train_loader, optimizer, criterion, device, ewc, ew
         images = imgs.to(device)
         images = torch.angle(torch.fft.fftn(images, dim=(2, 3)))
         optimizer.zero_grad()
-        _, features = model(images)
+        features, _ = model(images)
         loss = criterion(features)
         if ewc:
             loss += ewc_loss(model)
@@ -143,14 +165,14 @@ def get_score(model, device, train_loader, test_loader):
     with torch.no_grad():
         for (imgs, _) in tqdm(train_loader, desc='Train set feature extracting'):
             imgs = imgs.to(device)
-            _, features = model(imgs)
+            features, _ = model(imgs)
             train_feature_space.append(features)
         train_feature_space = torch.cat(train_feature_space, dim=0).contiguous().cpu().numpy()
     test_feature_space = []
     with torch.no_grad():
         for (imgs, _) in tqdm(test_loader, desc='Test set feature extracting'):
             imgs = imgs.to(device)
-            _, features = model(imgs)
+            features, _ = model(imgs)
             test_feature_space.append(features)
         test_feature_space = torch.cat(test_feature_space, dim=0).contiguous().cpu().numpy()
         test_labels = test_loader.dataset.targets
@@ -166,7 +188,7 @@ def get_score_fourier(model, device, train_loader, test_loader):
         for (imgs, _) in tqdm(train_loader, desc='Fourier Train set featire extracting'):
             imgs = imgs.to(device)
             imgs = torch.angle(torch.fft.fftn(imgs, dim=(2, 3)))
-            _, features = model(imgs)
+            features, _ = model(imgs)
             train_feature_space.append(features)
         train_feature_space = (torch.cat(train_feature_space, dim=0)).contiguous().cpu().numpy()
     test_feature_space = []
@@ -174,7 +196,7 @@ def get_score_fourier(model, device, train_loader, test_loader):
         for (imgs, _) in tqdm(test_loader, desc='Fourier Test set feature extracting'):
             imgs = imgs.to(device)
             imgs = torch.angle(torch.fft.fftn(imgs, dim=(2, 3)))
-            _, features = model(imgs)
+            features, _ = model(imgs)
             test_feature_space.append(features)
         test_feature_space = torch.cat(test_feature_space, dim=0).contiguous().cpu().numpy()
         test_labels = test_loader.dataset.targets
@@ -182,6 +204,19 @@ def get_score_fourier(model, device, train_loader, test_loader):
     auc = roc_auc_score(test_labels, distances)
     return auc, train_feature_space
 
+
+class Net(nn.Module):
+    def __init__(self, resnet_type, bottleneck_input, bottleneck_output, layer_type='bn'):
+        super(Net, self).__init__()
+        self.featurizer = utils.get_resnet_model(resnet_type=resnet_type)
+        self.bottleneck = common_network.feat_bottleneck(bottleneck_input, bottleneck_output, layer_type)
+        self.bottleneck_output = bottleneck_output
+        
+    def forward(self, x):
+        feature = self.featurizer(x)
+        output = self.bottleneck(feature)
+        return feature, output
+        
 
 def main(args):
     print('Dataset: {}, Normal Label: {}, LR: {}'.format(args.dataset, args.label, args.lr))
@@ -192,27 +227,27 @@ def main(args):
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
-    # teacher_featurizerのロード
-    teacher_featurizer = utils.get_resnet_model(resnet_type=args.resnet_type)
-    teacher_featurizer = teacher_featurizer.to(device)
+    # teacher_net
+    teacher_net = Net(args.resnet_type, 512, 256, 'bn')
+    teacher_net.to(device)
     
-    # teacher_featureの訓練
-    train_model_fourier(teacher_featurizer, train_loader, test_loader, device, args, ewc_loss)
+    # teacher_featurizerの訓練
+    train_model_fourier(teacher_net, train_loader, test_loader, device, args, ewc_loss)
     
-    # student_featureのロード
-    student_featurizer = utils.get_resnet_model(resnet_type=args.resnet_type)
-    student_featurizer = student_featurizer.to(device)
-
+    # student_net
+    student_net = Net(args.resnet_type, 512, 512, 'bn')
+    student_net.to(device)
+    
     # Freezing Pre-trained model for EWC
-    if args.ewc:
-        frozen_model = deepcopy(student_featurizer).to(device)
-        frozen_model.eval()
-        utils.freeze_model(frozen_model)
-        fisher = torch.load(args.diag_path)
-        ewc_loss = EWCLoss(frozen_model, fisher)
-    utils.freeze_parameters(student_featurizer)
+    # if args.ewc:
+    #     frozen_model = deepcopy(student_featurizer).to(device)
+    #     frozen_model.eval()
+    #     utils.freeze_model(frozen_model)
+    #     fisher = torch.load(args.diag_path)
+    #     ewc_loss = EWCLoss(frozen_model, fisher)
+    # utils.freeze_parameters(student_featurizer)
     
-    train_model(teacher_featurizer, student_featurizer, train_loader, test_loader, device, args, ewc_loss)
+    train_model(teacher_net, student_net, train_loader, test_loader, device, args, ewc_loss)
 
 
 if __name__ == "__main__":
@@ -232,6 +267,9 @@ if __name__ == "__main__":
     parser.add_argument('--interval', type=int, default=5)
     parser.add_argument('--lr_fourier', type=float, default=1e-4)
     parser.add_argument('--alpha', type=float, default=1e-1)
+    parser.add_argument('--beta', type=float, default=1e-1)
+    parser.add_argument('--theta', type=float, default=1e-1)
+    parser.add_argument('--epochs_fourier', type=int, default=5)
     
 
     args = parser.parse_args()
