@@ -8,3 +8,4 @@ python3 panda_vanilla.py \
     --severity 1 \
     --interval 5 \
     --data_root ~/data\
+    --ewc 
