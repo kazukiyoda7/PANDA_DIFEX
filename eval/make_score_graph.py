@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import argparse
-from utils import fix_seed
 
 def get_args():
     parser = argparse.ArgumentParser(description='')
@@ -14,7 +13,6 @@ def get_args():
     return args
     
 args = get_args()
-fix_seed(args.seed)
 
 corruption_list = ['clean', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'speckle_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'gaussian_blur', 'snow', 
                     'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression', 'saturate', 'spatter']
@@ -23,6 +21,10 @@ cifar10_class = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog',
 
 id_class = args.id_class
 
+save_dir = os.path.join(args.output_dir, 'graph', str(id_class))
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+    
 for s in range(1, 6):
     ood_class = list(filter(lambda x: x!=id_class, range(10)))
     severity = s
@@ -39,11 +41,6 @@ for s in range(1, 6):
         path = os.path.join(args.input_dir, f'{id_class}/{severity}/{k}.npy')
         arr = np.load(path)
         score_list[k] = arr
-        
-    save_dir = os.path.join(args.output_dir, 'graph', str(id_class))
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
 
     # box ------------------------------------------------------------------
     plt.figure(figsize=(10, 6))

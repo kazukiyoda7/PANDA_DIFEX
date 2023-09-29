@@ -96,30 +96,24 @@ def get_outliers_loader(batch_size):
     return outlier_loader
 
 def get_loaders(dataset, label_class, batch_size, args):
-    if dataset in ['cifar10', 'fashion']:
+    
+    # if args.domain is None:
+    #     domain_list = []
+    # else:
+    #     domain_list = args.domain.split('-')
+    # domain_num = len(domain_list)
+    # print(domain_list)
+    # if not all(noise in corruption_tuple+('clean') for noise in domain_list):
+    #     print("corruption name is incorrect")
+    
+    if dataset in ['cifar10']:
         if dataset == "cifar10":
             ds = torchvision.datasets.CIFAR10
             transform = transform_color
             coarse = {}
             trainset = ds(root=args.data_root, train=True, download=True, transform=transform, **coarse)
             testset = ds(root=args.data_root, train=False, download=True, transform=transform, **coarse)
-        # elif dataset == "fashion":
-        #     ds = torchvision.datasets.FashionMNIST
-        #     transform = transform_gray
-        #     coarse = {}
-        #     trainset = ds(root='data', train=True, download=True, transform=transform, **coarse)
-        #     testset = ds(root='data', train=False, download=True, transform=transform, **coarse)
-        
-        # if args.noise is None:
-        #     noise_list = []
-        # else:
-        #     noise_list = args.noise.split('-')
-        # domain_num = len(noise_list)
-        # print(noise_list)
-        
-        # if not all(noise in corruption_tuple for noise in noise_list):
-        #     print("corruption name is incorrect")
-
+    
         idx = np.array(trainset.targets) == label_class
         testset.targets = [int(t != label_class) for t in testset.targets]
         trainset.data = trainset.data[idx]
@@ -135,9 +129,8 @@ def get_loaders(dataset, label_class, batch_size, args):
         #     all_idx = [x for x in all_idx if x not in idx_array]
         #     idx_list.append(all_idx)
         
-        # trainset = CustomCIFAR10(trainset, idx_list, noise_list, args.severity, transform_list)
-        # trainset.cifar10_dataset.data = trainset.cifar10_dataset.data[:2500]
-        # trainset.cifar10_dataset.label = trainset.cifar10_dataset.label[:2500]
+        # trainset = CustomCIFAR10(trainset, idx_list, domain_list, args.severity, transform_list)
+        
         train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, drop_last=False)
         test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=False)
         return train_loader, test_loader

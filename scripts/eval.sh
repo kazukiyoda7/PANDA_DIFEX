@@ -5,4 +5,4 @@ python3 eval_robustness.py \
     --severity 1 \
     --eval_domain clean-gaussian_noise-fog \
     --model_path trained_model/resnet18/clean+snow/model_30.pth \
-    --feature_path trained_model/resnet18/clean+snow/train_feature_30.npy
+    --feature_path trained_model/resnet18/clean+snow/train_feature_30.npy 

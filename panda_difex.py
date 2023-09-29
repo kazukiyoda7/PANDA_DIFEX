@@ -271,6 +271,7 @@ if __name__ == "__main__":
     parser.add_argument('--theta', type=float, default=1e-1)
     parser.add_argument('--epochs_fourier', type=int, default=5)
     parser.add_argument('--data_root', type=str, default='~/data')
+    parser.add_argument('--domain', type=str, default='clean')
     
 
     args = parser.parse_args()

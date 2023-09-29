@@ -1,4 +1,4 @@
-python3 panda.py \
+python3 panda_difex.py \
     --dataset cifar10 \
     --label 0 \
     --epochs 30 \
@@ -12,5 +12,5 @@ python3 panda.py \
     --beta 1\
     --theta 1\
     --epochs_fourier 5\
-    --data_root ~/data
-    # --noise snow
+    --data_root ~/data \
+    --domain 'clean'\
