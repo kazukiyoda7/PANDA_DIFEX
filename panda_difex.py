@@ -253,7 +253,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--dataset', default='cifar10')
-    parser.add_argument('--diag_path', default='../data/fisher_diagonal.pth', help='fim diagonal path')
+    parser.add_argument('--diag_path', default='~/data/fisher_diagonal.pth', help='fim diagonal path')
     parser.add_argument('--ewc', action='store_true', help='Train with EWC')
     parser.add_argument('--epochs', default=15, type=int, metavar='epochs', help='number of epochs')
     parser.add_argument('--label', default=0, type=int, help='The normal class')
@@ -270,6 +270,8 @@ if __name__ == "__main__":
     parser.add_argument('--beta', type=float, default=1e-1)
     parser.add_argument('--theta', type=float, default=1e-1)
     parser.add_argument('--epochs_fourier', type=int, default=5)
+    parser.add_argument('--data_root', type=str, default='~/data')
+    parser.add_argument('--domain', type=str, default='clean')
     
 
     args = parser.parse_args()

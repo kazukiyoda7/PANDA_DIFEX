@@ -1,18 +1,18 @@
 # settings
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
-import torch.optim as optim
 import argparse
+from utils import fix_seed
 import utils
 import json
-from tqdm import tqdm
-import os
-from utils import fix_seed
 
 import torchvision
 from torchvision import transforms
-from torchvision.utils import save_image
 
 import csv
 
@@ -48,7 +48,7 @@ parser.add_argument('--feature_path', type=str, required=True)
 parser.add_argument('--seed', type=int, default=42)
 parser.add_argument('--eval_domain', type=str, default='clean')
 parser.add_argument('--output_dir', type=str, default='.')
-parser.add_argument('--score_save_dir', type=str, default='.')
+parser.add_argument('--data_root', type=str, default='~/data')
 args = parser.parse_args()
 
 fix_seed(args.seed)
@@ -101,19 +101,15 @@ def eval_semantic_shift(id_class, model_path, train_feature_path, args, device):
         print(corruption_names)
 
         transform = transform_color
-        trainset = torchvision.datasets.CIFAR10(root='../data', train=True, download=False, transform=transform)
-        idx = np.array(trainset.targets) == id_class
-        trainset.data = trainset.data[idx]
-        trainloader = torch.utils.data.DataLoader(trainset, batch_size=1500, shuffle=False, num_workers=4)
 
         results = {}
 
         for ood_label in ood_labels:
             ood_domain = 'clean'
-            testloader_out = get_testloader(root='../data', transform=transform, corruption_name=ood_domain, severity=s, label=ood_label)
+            testloader_out = get_testloader(root=args.data_root, transform=transform, corruption_name=ood_domain, severity=s, label=ood_label)
             model.eval()                
             _ , score_out = get_score(model, device, train_feature_space, testloader_out, class_idx=ood_label)
-            score_save_dir = os.path.join(args.score_save_dir, str(id_class), 'ood')
+            score_save_dir = os.path.join(args.output_dir, 'score', str(id_class), 'ood')
             if not os.path.exists(score_save_dir):
                 os.makedirs(score_save_dir)
             np.save(os.path.join(score_save_dir, f'clean_{ood_label}.npy'), score_out)
@@ -124,10 +120,10 @@ def eval_semantic_shift(id_class, model_path, train_feature_path, args, device):
                 id_domain = k
                     
                 #in
-                testloader_in = get_testloader(root='../data', transform=transform, corruption_name=k, severity=s, label=id_class)
+                testloader_in = get_testloader(root=args.data_root, transform=transform, corruption_name=k, severity=s, label=id_class)
                 model.eval()                
                 _ , score_in = get_score(model, device, train_feature_space, testloader_in, class_idx=id_class)
-                score_save_dir = os.path.join(args.score_save_dir, str(id_class), str(s))
+                score_save_dir = os.path.join(args.output_dir, 'score', str(id_class), str(s))
                 if not os.path.exists(score_save_dir):
                     os.makedirs(score_save_dir)
                 np.save(os.path.join(score_save_dir, k+'.npy'), score_in)
@@ -144,10 +140,10 @@ def eval_semantic_shift(id_class, model_path, train_feature_path, args, device):
             avg_auroc = sum(results[ood_label].values()) / len(corruption_names)
             results[ood_label]["average"] = avg_auroc
 
-        save_dir = os.path.join(args.output_dir, str(id_class))
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        filename = os.path.join(save_dir, f"auroc_results_{cifar10_class[id_class]}_severity_{s}.csv")
+        csv_save_dir = os.path.join(args.output_dir, 'csv', str(id_class))
+        if not os.path.exists(csv_save_dir):
+            os.makedirs(csv_save_dir)
+        filename = os.path.join(csv_save_dir, f"auroc_results_{cifar10_class[id_class]}_severity_{s}.csv")
         
         with open(filename, "w", newline='') as csvfile:
             csvwriter = csv.writer(csvfile)
@@ -164,4 +160,8 @@ def eval_semantic_shift(id_class, model_path, train_feature_path, args, device):
             print('result_outputed')
 
 
+save_json_path = os.path.join(args.output_dir, "config_args.json")
+with open(save_json_path, "w") as f:
+    json.dump(vars(args), f, indent=2)
+        
 eval_semantic_shift(args.label, args.model_path, args.feature_path, args, device)

@@ -1,15 +1,16 @@
-python3 panda.py \
+python3 panda_difex.py \
     --dataset cifar10 \
     --label 0 \
     --epochs 30 \
     --resnet_type 18 \
-    --output_dir results \
+    --output_dir train_results \
     --seed 42 \
     --severity 1 \
-    --interval 5 \
+    --interval 10 \
     --lr_fourier 1e-4 \
     --alpha 1 \
     --beta 1\
     --theta 1\
     --epochs_fourier 5\
-    # --noise snow
+    --data_root ~/data \
+    --domain 'clean'\
