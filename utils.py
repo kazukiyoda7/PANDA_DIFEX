@@ -11,8 +11,8 @@ from imagecorruptions import corrupt
 from PIL import Image
 
 mvtype = ['bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut', 'leather',
-          'metal_nut', 'pill', 'screw', 'tile', 'toothbrush', 'transistor',
-          'wood', 'zipper']
+        'metal_nut', 'pill', 'screw', 'tile', 'toothbrush', 'transistor',
+        'wood', 'zipper']
 
 corruption_tuple = ("gaussian_noise", "shot_noise", "impulse_noise", "defocus_blur",
                     "glass_blur", "motion_blur", "zoom_blur", "snow", "frost", "fog",
@@ -27,16 +27,16 @@ transform_list = [transforms.Resize(256),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
 
 transform_color = transforms.Compose([transforms.Resize(256),
-                                      transforms.CenterCrop(224),
-                                      transforms.ToTensor(),
-                                      transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+                                    transforms.CenterCrop(224),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
 transform_gray = transforms.Compose([
-                                 transforms.Resize(256),
-                                 transforms.CenterCrop(224),
-                                 transforms.Grayscale(num_output_channels=3),
-                                 transforms.ToTensor(),
-                                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                                transforms.Resize(256),
+                                transforms.CenterCrop(224),
+                                transforms.Grayscale(num_output_channels=3),
+                                transforms.ToTensor(),
+                                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
                                 ])
 
 class NoiseAug(object):
@@ -97,14 +97,15 @@ def get_outliers_loader(batch_size):
 
 def get_loaders(dataset, label_class, batch_size, args):
     
-    # if args.domain is None:
-    #     domain_list = []
-    # else:
-    #     domain_list = args.domain.split('-')
-    # domain_num = len(domain_list)
-    # print(domain_list)
-    # if not all(noise in corruption_tuple+('clean') for noise in domain_list):
-    #     print("corruption name is incorrect")
+    # 訓練に使用するドメイン名の取得と表示
+    if args.domain is None:
+        domain_list = []
+    else:
+        domain_list = args.domain.split('-')
+    args.domain_list = domain_list
+    domain_num = len(domain_list)
+    print(domain_list)
+    assert all(noise in corruption_tuple+('clean',) for noise in domain_list), "corruption name is incorrect"
     
     if dataset in ['cifar10']:
         if dataset == "cifar10":
@@ -119,19 +120,20 @@ def get_loaders(dataset, label_class, batch_size, args):
         trainset.data = trainset.data[idx]
         trainset.targets = [trainset.targets[i] for i, flag in enumerate(idx, 0) if flag]
         
-        # data_num = trainset.data.shape[0]
-        # all_idx = list(range(data_num))
-        # idx_list = []
+        data_num = trainset.data.shape[0]
+        all_idx = list(range(data_num))
+        idx_dict = {}
         
-        # for i in range(domain_num):
-        #     idx_array = random.sample(all_idx, data_num//(domain_num+1))
-        #     idx_array = np.sort(idx_array)
-        #     all_idx = [x for x in all_idx if x not in idx_array]
-        #     idx_list.append(all_idx)
+        # ドメインごとのインデックスを生成しつつ，データを取得
+        for domain in domain_list:
+            idx_array = random.sample(all_idx, data_num//(domain_num))
+            idx_array = np.sort(idx_array)
+            all_idx = [x for x in all_idx if x not in idx_array]
+            idx_dict[domain] = np.array(idx_array)
+            
+        trainset = CustomDataset(idx_dict, trainset, transform_list, severity=1)
         
-        # trainset = CustomCIFAR10(trainset, idx_list, domain_list, args.severity, transform_list)
-        
-        train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, drop_last=False)
+        train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size//domain_num, shuffle=True, num_workers=2, drop_last=False)
         test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=False)
         return train_loader, test_loader
     else:
@@ -171,8 +173,31 @@ class CustomCIFAR10(Dataset):
                 img = np.array(img)
                 img = corrupt(img, corruption_name=self.noise_list[i], severity=self.severity)
                 img = Image.fromarray(img)
-        # img.save('image.png')
         img = self.transform(img)
-        
-
+    
         return img, label
+
+
+class CustomDataset(Dataset):
+    def __init__(self, idx_dict, trainset, transform_list=None, severity=1):
+        self.data = trainset.data
+        self.targets = trainset.targets
+        self.idx_dict = idx_dict
+        self.severity = severity
+        self.transform = transforms.Compose(transform_list)
+        self.domain_num = len(list(idx_dict.keys()))
+
+    def __len__(self):
+        return len(self.data)//self.domain_num
+
+    def __getitem__(self, idx):
+        imgs = {}
+        for key, value in self.idx_dict.items():
+            img = self.data[value[idx]]
+            if not key == "clean":    
+                img = np.array(img)
+                img = corrupt(img, corruption_name=key, severity=self.severity)
+            img = Image.fromarray(img)
+            img = self.transform(img)
+            imgs[key] = img    
+        return imgs
