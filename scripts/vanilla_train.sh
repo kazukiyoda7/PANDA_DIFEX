@@ -6,6 +6,7 @@ python3 panda_vanilla.py \
     --output_dir train_results \
     --seed 42 \
     --severity 1 \
-    --interval 5 \
+    --interval 10 \
     --data_root ~/data\
-    --ewc 
+    --domain clean-glass_blur \
+    # --ewc 

@@ -161,6 +161,8 @@ def eval_semantic_shift(id_class, model_path, train_feature_path, args, device):
 
 
 save_json_path = os.path.join(args.output_dir, "config_args.json")
+if not os.path.exists(args.output_dir):
+    os.makedirs(args.output_dir)
 with open(save_json_path, "w") as f:
     json.dump(vars(args), f, indent=2)
         

@@ -18,11 +18,10 @@ from torchvision.utils import save_image
 
 def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    auc, feature_space = get_score(model, device, train_loader, test_loader)
+    auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
     optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0) # 5000*512
-    # torch.save(center, 'train_center.pth')
     criterion = CompactnessLoss(center.to(device)) # 512
     model_save_dir = osp.join(args.output_dir, 'model')
     feature_save_dir = osp.join(args.output_dir, 'feature')
@@ -32,9 +31,9 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     if not osp.exists(feature_save_dir):
         os.makedirs(feature_save_dir)
     for epoch in range(args.epochs):
-        running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
+        running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.domain_list)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
-        auc, feature_space = get_score(model, device, train_loader, test_loader)
+        auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
         if auc > best_auc:
             best_epoch = epoch
@@ -50,9 +49,14 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
         
 
 
-def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
+def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss, domain_list):
     running_loss = 0.0
-    for i, (imgs, _) in enumerate(train_loader):
+    for i, img_dict in enumerate(train_loader):
+        
+        img_list = []
+        for domain in domain_list:
+            img_list.append(img_dict[domain])
+        imgs = torch.cat(img_list, dim=0)
 
         images = imgs.to(device)
 
@@ -76,10 +80,14 @@ def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
     return running_loss / (i + 1)
 
 
-def get_score(model, device, train_loader, test_loader):
+def get_score(model, device, train_loader, test_loader, domain_list):
     train_feature_space = []
     with torch.no_grad():
-        for (imgs, _) in tqdm(train_loader, desc='Train set feature extracting'):
+        for img_dict in tqdm(train_loader, desc='Train set feature extracting'):
+            img_list = []
+            for domain in domain_list:
+                img_list.append(img_dict[domain])
+            imgs = torch.cat(img_list, dim=0)
             imgs = imgs.to(device)
             features = model(imgs)
             train_feature_space.append(features)
@@ -128,7 +136,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--dataset', default='cifar10')
-    parser.add_argument('--diag_path', default='../data/fisher_diagonal.pth', help='fim diagonal path')
+    parser.add_argument('--diag_path', default='~/data/fisher_diagonal.pth', help='fim diagonal path')
     parser.add_argument('--ewc', action='store_true', help='Train with EWC')
     parser.add_argument('--epochs', default=15, type=int, metavar='epochs', help='number of epochs')
     parser.add_argument('--label', default=0, type=int, help='The normal class')
@@ -140,7 +148,13 @@ if __name__ == "__main__":
     parser.add_argument('--noise', type=str, default=None)
     parser.add_argument('--severity', type=int, default=3)
     parser.add_argument('--interval', type=int, default=5)
+    parser.add_argument('--lr_fourier', type=float, default=1e-4)
+    parser.add_argument('--alpha', type=float, default=1e-1)
+    parser.add_argument('--beta', type=float, default=1e-1)
+    parser.add_argument('--theta', type=float, default=1e-1)
+    parser.add_argument('--epochs_fourier', type=int, default=5)
     parser.add_argument('--data_root', type=str, default='~/data')
+    parser.add_argument('--domain', type=str, default='clean')
     
     args = parser.parse_args()
     
