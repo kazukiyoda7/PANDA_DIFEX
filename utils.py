@@ -20,6 +20,9 @@ corruption_tuple = ("gaussian_noise", "shot_noise", "impulse_noise", "defocus_bl
                     "jpeg_compression", "speckle_noise", "gaussian_blur", "spatter",
                     "saturate")
 
+corruption_list = list(corruption_tuple)
+corruption_list.remove("spatter")
+corruption_tuple = tuple(corruption_list)
 
 transform_list = [transforms.Resize(256),
                 transforms.CenterCrop(224),
@@ -100,6 +103,8 @@ def get_loaders(dataset, label_class, batch_size, args):
     # 訓練に使用するドメイン名の取得と表示
     if args.domain is None:
         domain_list = []
+    elif args.domain == "all":
+        domain_list = list(corruption_tuple+('clean',))
     else:
         domain_list = args.domain.split('-')
     args.domain_list = domain_list
@@ -154,29 +159,6 @@ def fix_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
     torch.backends.cudnn.benchmark = True
-
-class CustomCIFAR10(Dataset):
-    def __init__(self, cifar10_dataset, idx_list, noise_list, severity, transform_list):
-        self.cifar10_dataset = cifar10_dataset
-        self.idx_list = idx_list
-        self.severity = severity
-        self.noise_list = noise_list
-        self.transform = transforms.Compose(transform_list)
-
-    def __len__(self):
-        return len(self.cifar10_dataset)
-
-    def __getitem__(self, idx):
-        img, label = self.cifar10_dataset[idx]
-        for i in range(len(self.idx_list)):
-            if idx in self.idx_list[i]:
-                img = np.array(img)
-                img = corrupt(img, corruption_name=self.noise_list[i], severity=self.severity)
-                img = Image.fromarray(img)
-        img = self.transform(img)
-    
-        return img, label
-
 
 class CustomDataset(Dataset):
     def __init__(self, idx_dict, trainset, transform_list=None, severity=1):
