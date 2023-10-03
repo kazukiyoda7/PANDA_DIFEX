@@ -15,6 +15,7 @@ import datetime
 import os.path as osp
 from utils import fix_seed
 from torchvision.utils import save_image
+from matplotlib import pyplot as plt
 
 def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
@@ -25,14 +26,20 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     criterion = CompactnessLoss(center.to(device)) # 512
     model_save_dir = osp.join(args.output_dir, 'model')
     feature_save_dir = osp.join(args.output_dir, 'feature')
+    loss_save_dir = osp.join(args.output_dir, 'loss')
     best_auc, best_epoch = 0, 0
+    loss_list = []
     if not osp.exists(model_save_dir):
         os.makedirs(model_save_dir)
     if not osp.exists(feature_save_dir):
         os.makedirs(feature_save_dir)
+    if not osp.exists(loss_save_dir):
+        os.makedirs(loss_save_dir)
     for epoch in range(args.epochs):
-        running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.domain_list)
+        running_loss, running_loss_dict = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.domain_list)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
+        print(running_loss_dict)
+        loss_list.append(running_loss_dict)
         auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
         if auc > best_auc:
@@ -44,6 +51,7 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
         if (epoch+1) % args.interval == 0:
             torch.save(model, osp.join(model_save_dir, f'model_{epoch+1}.pth'))
             np.save(osp.join(feature_save_dir, f'train_feature_{epoch+1}.npy'), feature_space)
+    plot_loss_evolution(loss_list, osp.join(loss_save_dir, 'loss.png'))
         
     print(f'best_eposh is {best_epoch}')
         
@@ -51,11 +59,20 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
 
 def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss, domain_list):
     running_loss = 0.0
+    running_loss_dict = {}
+    for domain in domain_list:
+        running_loss_dict[domain] = 0.0
     for i, img_dict in enumerate(train_loader):
         
-        img_list = []
+        loss_dict = {}
         for domain in domain_list:
-            img_list.append(img_dict[domain])
+            loss_dict[domain] = 0.0
+        
+        img_list = []
+        
+        for domain in domain_list:
+            img_list.append(img_dict[domain])            
+            
         imgs = torch.cat(img_list, dim=0)
 
         images = imgs.to(device)
@@ -63,8 +80,16 @@ def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss, 
         optimizer.zero_grad()
 
         features = model(images)
+        
+        num_per_class = features.shape[0]//len(domain_list)
+        for i, domain in enumerate(domain_list):
+            features_in_domain = features[num_per_class*i:num_per_class*(i+1)]
+            loss_dict[domain] += criterion(features_in_domain)
+            
+        loss = sum(loss_dict.values())
+        # loss_dict['total'] = loss
 
-        loss = criterion(features)
+        # loss = criterion(features)
 
         if ewc:
             loss += ewc_loss(model)
@@ -76,8 +101,13 @@ def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss, 
         optimizer.step()
 
         running_loss += loss.item()
-
-    return running_loss / (i + 1)
+        
+        for domain in domain_list:
+            running_loss_dict[domain] += loss_dict[domain].item()
+            
+    for domain in domain_list:
+        running_loss_dict[domain] /= i + 1
+    return running_loss / (i + 1), running_loss_dict
 
 
 def get_score(model, device, train_loader, test_loader, domain_list):
@@ -105,6 +135,24 @@ def get_score(model, device, train_loader, test_loader, domain_list):
     auc = roc_auc_score(test_labels, distances)
 
     return auc, train_feature_space
+
+def plot_loss_evolution(loss_data_list, save_path='loss_evolution.png'):
+    # Assuming all dictionaries have the same keys/domains
+    domains = list(loss_data_list[0].keys())
+
+    for domain in domains:
+        losses = [data[domain] for data in loss_data_list]
+        plt.plot(losses, label=domain)
+
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Loss Evolution over Epochs')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.savefig(save_path)
+    plt.close()
 
 def main(args):
     print('Dataset: {}, Normal Label: {}, LR: {}'.format(args.dataset, args.label, args.lr))

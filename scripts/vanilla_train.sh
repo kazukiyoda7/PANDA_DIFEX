@@ -8,5 +8,5 @@ python3 panda_vanilla.py \
     --severity 1 \
     --interval 10 \
     --data_root ~/data\
-    --domain clean-glass_blur \
+    --domain clean \
     # --ewc 
