@@ -156,7 +156,7 @@ def run_epoch_fix(teachernet, student_net, train_loader, optimizer, criterion, d
         if loss4 is not None:
             running_loss4 += loss4.item()
             running_loss += loss4.item()
-    return running_loss, running_loss1/(i+1), running_loss2/(i+1), running_loss3/(i+1), running_loss4/(i+1)
+    return running_loss/(i+1), running_loss1/(i+1), running_loss2/(i+1), running_loss3/(i+1), running_loss4/(i+1)
 
 def run_epoch_fourier(model, train_loader, optimizer, criterion, device, ewc, ewc_loss, domain_list):
     running_loss = 0.0

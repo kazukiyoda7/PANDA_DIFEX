@@ -3,7 +3,7 @@
 method=$1
 model_path=$2
 feature_path=$3
-operation=$4  # 追加した操作を指定するための引数
+shift 3
 
 # 関数定義
 calc_score() {
@@ -19,18 +19,19 @@ make_graph2() {
     bash scripts/eval/make_graph2.sh $method
 }
 
-# コマンドライン引数に基づいて関数を実行
-case $operation in
-    calc_score)
-        calc_score
-        ;;
-    eval_semantic_shift)
-        eval_semantic_shift
-        ;;
-    make_graph2)
-        make_graph2
-        ;;
-    *)
-        echo "Invalid operation. Choose from [calc_score, eval_semantic_shift, make_graph2]"
-        ;;
-esac
+for operation in "$@"; do
+    case $operation in
+        calc_score)
+            calc_score
+            ;;
+        eval_semantic_shift)
+            eval_semantic_shift
+            ;;
+        make_graph2)
+            make_graph2
+            ;;
+        *)
+            echo "Invalid operation: $operation. Choose from [calc_score, eval_semantic_shift, make_graph2]"
+            ;;
+    esac
+done
