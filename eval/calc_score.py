@@ -48,6 +48,7 @@ parser.add_argument('--seed', type=int, default=42)
 parser.add_argument('--eval_domain', type=str, default='clean')
 parser.add_argument('--output_dir', type=str, default='.')
 parser.add_argument('--data_root', type=str, default='~/data')
+parser.add_argument('--method', type=str, default='vanilla')
 args = parser.parse_args()
 
 fix_seed(args.seed)
@@ -57,7 +58,7 @@ transform_color = transforms.Compose([transforms.Resize(256),
                                     transforms.ToTensor(),
                                     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
-def get_score(model, device, train_feature_space, testloader, class_idx=0):
+def get_score(model, device, train_feature_space, testloader, method, class_idx=0):
     model.to(device)
     model.eval()
     test_labels = []
@@ -65,7 +66,10 @@ def get_score(model, device, train_feature_space, testloader, class_idx=0):
     with torch.no_grad():
         for (imgs, labels) in testloader:
             imgs = imgs.to(device)
-            features = model(imgs)
+            if 'difex' in method:
+                features, _ = model(imgs)
+            else:
+                features = model(imgs)
             test_feature_space.append(features)
             batch_size = imgs.shape[0]
             for j in range(batch_size):
@@ -95,10 +99,10 @@ def calc_score(model_path, train_feature_path, args, device):
     for s in range(1, 6):
         for i in range(10):
             for k in corruption_list:
-                print(f'severity {s} Class {i}, corruption {k}')
+                print(f'severity {s}, Class {i}, corruption {k}')
                 testloader = get_testloader(root=args.data_root, transform=transform, corruption_name=k, severity=s, label=i)
                 model.eval()                
-                _ , score_out = get_score(model, device, train_feature_space, testloader, class_idx=i)
+                _ , score_out = get_score(model, device, train_feature_space, testloader, args.method, class_idx=i)
                 score_save_dir = os.path.join(args.output_dir, 'score', str(s), str(i))
                 if not os.path.exists(score_save_dir):
                     os.makedirs(score_save_dir)

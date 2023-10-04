@@ -8,9 +8,9 @@ python3 panda_difex.py \
     --severity 1 \
     --interval 10 \
     --lr_fourier 1e-4 \
-    --alpha 1 \
-    --beta 1\
-    --theta 1\
+    --alpha 0.1 \
+    --beta 0.1\
+    --theta 0.1\
     --epochs_fourier 5\
     --data_root ~/data \
     --domain 'clean'\
