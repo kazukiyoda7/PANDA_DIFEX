@@ -15,6 +15,7 @@ import json
 import datetime
 import os.path as osp
 from utils import fix_seed
+from matplotlib import pyplot as plt
 
 from difex.network import common_network
 from torch import nn
@@ -23,23 +24,26 @@ from torch import nn
 def train_model(teacher_net, student_net, train_loader, test_loader, device, args, ewc_loss):
     teacher_net.eval()
     student_net.eval()
-    auc, feature_space = get_score(student_net, device, train_loader, test_loader)
+    auc, feature_space = get_score(student_net, device, train_loader, test_loader, args.domain_list)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
     optimizer = optim.SGD(student_net.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0) # 5000*512
-    # torch.save(center, 'train_center.pth')
     criterion = CompactnessLoss(center.to(device)) # 512
     model_save_dir = osp.join(args.output_dir, 'model')
     feature_save_dir = osp.join(args.output_dir, 'feature')
+    loss_save_dir = osp.join(args.output_dir, 'loss')
     best_auc, best_epoch = 0, 0
+    loss_list = []
     if not osp.exists(model_save_dir):
         os.makedirs(model_save_dir)
     if not osp.exists(feature_save_dir):
         os.makedirs(feature_save_dir)
+    if not osp.exists(loss_save_dir):
+        os.makedirs(loss_save_dir)
     for epoch in range(args.epochs):
-        loss1, loss2, loss3, loss4 = run_epoch_fix(teacher_net, student_net, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.batch_size)
-        print('Epoch: {}, Loss1: {}, Loss2: {}, Loss3: {}, Loss4: {}'.format(epoch + 1, loss1, loss2, loss3, loss4))
-        auc, feature_space = get_score(student_net, device, train_loader, test_loader)
+        loss, loss1, loss2, loss3, loss4 = run_epoch_fix(teacher_net, student_net, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.batch_size, args.domain_list)
+        print('Epoch: {}, Loss: {}, Loss1: {}, Loss2: {}, Loss3: {}, Loss4: {}'.format(epoch + 1, loss, loss1, loss2, loss3, loss4))
+        auc, feature_space = get_score(student_net, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
         if auc > best_auc:
             best_epoch = epoch
@@ -56,7 +60,8 @@ def train_model(teacher_net, student_net, train_loader, test_loader, device, arg
     
 def train_model_fourier(model, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    auc, feature_space = get_score_fourier(model, device, train_loader, test_loader)
+    auc, feature_space = get_score_fourier(model, device, train_loader, test_loader, args.domain_list
+                                           )
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
     optimizer = optim.SGD(model.parameters(), lr=args.lr_fourier, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0)
@@ -69,9 +74,10 @@ def train_model_fourier(model, train_loader, test_loader, device, args, ewc_loss
     # if not osp.exists(feature_save_dir):
     #     os.makedirs(feature_save_dir)
     for epoch in range(args.epochs_fourier):
-        running_loss = run_epoch_fourier(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
+        running_loss, running_loss_dict = run_epoch_fourier(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.domain_list)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
-        auc, feature_space = get_score(model, device, train_loader, test_loader)
+        print(running_loss_dict)
+        auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
         if auc > best_auc:
             best_epoch = epoch+1
@@ -100,10 +106,18 @@ def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
         running_loss += loss.item()
     return running_loss / (i + 1)
 
-def run_epoch_fix(teachernet, student_net, train_loader, optimizer, criterion, device, ewc, ewc_loss, batch_size):
-    running_loss1, running_loss2, running_loss3, running_loss4 = 0.0, 0.0, 0.0, 0.0
+def run_epoch_fix(teachernet, student_net, train_loader, optimizer, criterion, device, ewc, ewc_loss, batch_size, domain_list):
+    running_loss, running_loss1, running_loss2, running_loss3, running_loss4 = 0.0, 0.0, 0.0, 0.0, 0.0
+    running_loss_dict = {}
+    for domain in domain_list:
+        running_loss_dict[domain] = 0.0
     teachernet.eval()
-    for i, (imgs, _) in enumerate(train_loader):
+    for i, img_dict in enumerate(train_loader):
+        
+        img_list = []
+        for domain in domain_list:
+            img_list.append(img_dict[domain])    
+        imgs = torch.cat(img_list, dim=0)
         
         with torch.no_grad():
             imgs = imgs.to(device)
@@ -138,32 +152,56 @@ def run_epoch_fix(teachernet, student_net, train_loader, optimizer, criterion, d
         running_loss1 += loss1.item()
         running_loss2 += loss2.item()
         running_loss3 += loss3.item()
+        running_loss += loss1.item() + loss2.item() + loss3.item()
         if loss4 is not None:
             running_loss4 += loss4.item()
-    return running_loss1/(i+1), running_loss2/(i+1), running_loss3/(i+1), running_loss4/(i+1)
+            running_loss += loss4.item()
+    return running_loss/(i+1), running_loss1/(i+1), running_loss2/(i+1), running_loss3/(i+1), running_loss4/(i+1)
 
-def run_epoch_fourier(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
+def run_epoch_fourier(model, train_loader, optimizer, criterion, device, ewc, ewc_loss, domain_list):
     running_loss = 0.0
-    for i, (imgs, _) in enumerate(train_loader):
+    running_loss_dict = {}
+    for domain in domain_list:
+        running_loss_dict[domain] = 0.0
+    for i, img_dict in enumerate(train_loader):
+        img_list = []
+        for domain in domain_list:
+            img_list.append(img_dict[domain])            
+        imgs = torch.cat(img_list, dim=0)
         images = imgs.to(device)
         images = torch.angle(torch.fft.fftn(images, dim=(2, 3)))
         optimizer.zero_grad()
         features, _ = model(images)
-        loss = criterion(features)
+        loss_dict = {}
+        for domain in domain_list:
+            loss_dict[domain] = 0.0
+        num_per_class = features.shape[0]//len(domain_list)
+        for i, domain in enumerate(domain_list):
+            features_in_domain = features[num_per_class*i:num_per_class*(i+1)]
+            loss_dict[domain] += criterion(features_in_domain)
+        loss = sum(loss_dict.values())
         if ewc:
             loss += ewc_loss(model)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1e-3)
         optimizer.step()
         running_loss += loss.item()
-    return running_loss / (i + 1)
+        for domain in domain_list:
+            running_loss_dict[domain] += loss_dict[domain].item()
+    for domain in domain_list:
+        running_loss_dict[domain] /= i + 1
+    return running_loss / (i + 1), running_loss_dict
 
 
-def get_score(model, device, train_loader, test_loader):
+def get_score(model, device, train_loader, test_loader, domain_list):
     model.eval()
     train_feature_space = []
     with torch.no_grad():
-        for (imgs, _) in tqdm(train_loader, desc='Train set feature extracting'):
+        for img_dict in tqdm(train_loader, desc='Train set feature extracting'):
+            img_list = []
+            for domain in domain_list:
+                img_list.append(img_dict[domain])            
+            imgs = torch.cat(img_list, dim=0)
             imgs = imgs.to(device)
             features, _ = model(imgs)
             train_feature_space.append(features)
@@ -181,11 +219,16 @@ def get_score(model, device, train_loader, test_loader):
     return auc, train_feature_space
 
 
-def get_score_fourier(model, device, train_loader, test_loader):
+def get_score_fourier(model, device, train_loader, test_loader, domain_list):
     model.eval()
     train_feature_space = []
     with torch.no_grad():
-        for (imgs, _) in tqdm(train_loader, desc='Fourier Train set featire extracting'):
+        for img_dict in tqdm(train_loader, desc='Fourier Train set featire extracting'):
+            img_list = []
+            for domain in domain_list:
+                img_list.append(img_dict[domain])     
+            imgs = torch.cat(img_list, dim=0)
+
             imgs = imgs.to(device)
             imgs = torch.angle(torch.fft.fftn(imgs, dim=(2, 3)))
             features, _ = model(imgs)
@@ -248,6 +291,24 @@ def main(args):
     # utils.freeze_parameters(student_featurizer)
     
     train_model(teacher_net, student_net, train_loader, test_loader, device, args, ewc_loss)
+
+def plot_loss_evolution(loss_data_list, save_path='loss_evolution.png'):
+    # Assuming all dictionaries have the same keys/domains
+    domains = list(loss_data_list[0].keys())
+
+    for domain in domains:
+        losses = [data[domain] for data in loss_data_list]
+        plt.plot(losses, label=domain)
+
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Loss Evolution over Epochs')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.savefig(save_path)
+    plt.close()
 
 
 if __name__ == "__main__":

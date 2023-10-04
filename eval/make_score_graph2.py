@@ -9,6 +9,7 @@ def get_args():
     parser.add_argument('--input_dir', type=str, required=True)
     parser.add_argument('--output_dir', type=str, required=True)
     parser.add_argument('--id_class', type=int, required=True)
+    parser.add_argument('--ood_class', type=int, default=1)
     args = parser.parse_args()
     return args
     
@@ -20,23 +21,23 @@ corruption_list = ['clean', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'sp
 cifar10_class = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck'] 
 
 id_class = args.id_class
+ood_class = args.ood_class
 
-save_dir = os.path.join(args.output_dir, 'graph', 'semantic', str(id_class))
+save_dir = os.path.join(args.output_dir, 'graph', 'covariate', str(id_class))
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
     
 for s in range(1, 6):
-    ood_class = list(filter(lambda x: x!=id_class, range(10)))
     severity = s
-    score_list = {}
 
-    for i in ood_class:
-        path = os.path.join(args.input_dir, str(s), str(i), 'clean.npy')
-        arr = np.load(path)
-        score_list[cifar10_class[i]] = arr
+    score_list = {}
+    
+    path = os.path.join(args.input_dir, str(s), str(id_class), 'clean.npy')
+    arr = np.load(path)
+    score_list['id_clean'] = arr
 
     for k in corruption_list:
-        path = os.path.join(args.input_dir, str(s), str(id_class), f'{k}.npy')
+        path = os.path.join(args.input_dir, str(s), str(ood_class), f'{k}.npy')
         arr = np.load(path)
         score_list[k] = arr
 
@@ -64,13 +65,10 @@ for s in range(1, 6):
 
     # 赤い点のインデックスと青い点のインデックスを取得
     red_indices = [i for i, txt in enumerate(score_list.keys()) if txt in corruption_list]
-    blue_indices = [i for i, txt in enumerate(score_list.keys()) if txt in cifar10_class]
-    green_indices = [i for i, txt in enumerate(score_list.keys()) if txt == 'clean']
+    green_indices = [i for i, txt in enumerate(score_list.keys()) if txt == 'id_clean']
 
     # 赤い点をプロット
     plt.scatter([medians[i] for i in red_indices], [y_values[i] for i in red_indices], color='red', s=100)
-    # 青い点をプロット
-    plt.scatter([medians[i] for i in blue_indices], [y_values[i] for i in blue_indices], color='skyblue', s=100)
     # 緑の点をプロット
     plt.scatter([medians[i] for i in green_indices], [y_values[i] for i in green_indices], color='green', s=100)
 

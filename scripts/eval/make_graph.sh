@@ -1,4 +1,4 @@
-method="vanilla+impluse" 
+method=$1
 
 python3 eval/make_score_graph.py \
     --seed 42 \
