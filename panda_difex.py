@@ -20,6 +20,8 @@ from matplotlib import pyplot as plt
 from difex.network import common_network
 from torch import nn
 
+from torch.utils.tensorboard import SummaryWriter
+
 
 def train_model(teacher_net, student_net, train_loader, test_loader, device, args, ewc_loss):
     teacher_net.eval()
@@ -54,7 +56,8 @@ def train_model(teacher_net, student_net, train_loader, test_loader, device, arg
         if (epoch+1) % args.interval == 0:
             torch.save(student_net, osp.join(model_save_dir, f'model_{epoch+1}.pth'))
             np.save(osp.join(feature_save_dir, f'train_feature_{epoch+1}.npy'), feature_space)
-        
+        args.writer.add_scalar('total loss', loss, epoch)
+        args.writer.add_scalars('losses', {'loss1': loss1, 'loss2':loss2, 'loss3': loss3, 'loss4': loss4}, epoch)
     print(f'best_epoch is {best_epoch}')
     
     
@@ -88,6 +91,8 @@ def train_model_fourier(model, train_loader, test_loader, device, args, ewc_loss
         # if (epoch+1) % args.interval == 0:
         #     torch.save(model, osp.join(model_save_dir, f'model_{epoch+1}.pth'))
         #     np.save(osp.join(feature_save_dir, f'train_feature_{epoch+1}.npy'), feature_space)
+        args.writer.add_scalar('fourier loss', running_loss, epoch)
+        
     print(f'best_epoch is {best_epoch}')
 
 
@@ -125,16 +130,26 @@ def run_epoch_fix(teachernet, student_net, train_loader, optimizer, criterion, d
             _, teacher_output = teachernet(imgs_phase)
             teacher_output = teacher_output.detach()
         images = imgs.to(device)
+        
         optimizer.zero_grad()
         student_features, student_output = student_net(images)
         
-        x = student_features[:batch_size//2, teachernet.bottleneck_output:]
-        y = student_features[batch_size//2:, teachernet.bottleneck_output:]
+        num_per_domain = student_features.shape[0]//len(domain_list)
         
-        loss4 = None
-        if len(x) > 1 and len(y) > 1:
-            loss4 = coral(student_features[:batch_size//2, teachernet.bottleneck_output:], student_features[batch_size//2:, teachernet.bottleneck_output:])*args.theta
-        
+        loss4 = None            
+        if len(domain_list) > 1:
+            loss4 = 0
+            for i in range(len(domain_list) - 1):
+                for j in range(i+1, len(domain_list)):
+                    loss4 += coral(student_features[i*num_per_domain:(i+1)*num_per_domain, teachernet.bottleneck_output:],
+                                    student_features[j*num_per_domain:(j+1)*num_per_domain, teachernet.bottleneck_output:])
+            loss4 = loss4*2/(len(domain_list)*(len(domain_list)-1))*args.theta        
+        else:
+            x = student_features[:batch_size//2, teachernet.bottleneck_output:]
+            y = student_features[batch_size//2:, teachernet.bottleneck_output:]
+            if len(x) > 1 and len(y) > 1:
+                loss4 = coral(student_features[:batch_size//2, teachernet.bottleneck_output:], student_features[batch_size//2:, teachernet.bottleneck_output:])*args.theta
+            
         loss1 = criterion(student_features)
         loss2 = F.mse_loss(teacher_output, student_output[:, :256])*args.alpha
         loss3 = -F.mse_loss(student_output[:, :teachernet.bottleneck_output], student_output[:, teachernet.bottleneck_output:])*args.beta
@@ -348,5 +363,11 @@ if __name__ == "__main__":
     save_json_path = os.path.join(args.output_dir, "config_args.json")
     with open(save_json_path, "w") as f:
         json.dump(vars(args), f, indent=2)
+        
+    tensorboard_dir = osp.join(args.output_dir, 'tensorboard_logs')
+    if not osp.exists(tensorboard_dir):
+        os.makedirs(tensorboard_dir)
+    writer = SummaryWriter(tensorboard_dir)
+    args.writer = writer
 
     main(args)
