@@ -5,8 +5,8 @@ python3 panda_vanilla.py \
     --resnet_type 18 \
     --output_dir train_results \
     --seed 42 \
-    --severity 1 \
+    --severity 5 \
     --interval 10 \
     --data_root ~/data\
-    --domain clean \
+    --domain clean-gaussian_noise \
     # --ewc 
