@@ -136,7 +136,7 @@ def get_loaders(dataset, label_class, batch_size, args):
             all_idx = [x for x in all_idx if x not in idx_array]
             idx_dict[domain] = np.array(idx_array)
             
-        trainset = CustomDataset(idx_dict, trainset, transform_list, severity=1)
+        trainset = CustomDataset(idx_dict, trainset, args.domain_list, transform_list, severity=1)
         
         train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size//domain_num, shuffle=True, num_workers=2, drop_last=False)
         test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=False)
@@ -161,13 +161,14 @@ def fix_seed(seed):
     torch.backends.cudnn.benchmark = True
 
 class CustomDataset(Dataset):
-    def __init__(self, idx_dict, trainset, transform_list=None, severity=1):
+    def __init__(self, idx_dict, trainset, domain_list, transform_list=None, severity=1):
         self.data = trainset.data
         self.targets = trainset.targets
         self.idx_dict = idx_dict
         self.severity = severity
         self.transform = transforms.Compose(transform_list)
         self.domain_num = len(list(idx_dict.keys()))
+        self.domain_list = domain_list
 
     def __len__(self):
         return len(self.data)//self.domain_num
@@ -181,5 +182,6 @@ class CustomDataset(Dataset):
                 img = corrupt(img, corruption_name=key, severity=self.severity)
             img = Image.fromarray(img)
             img = self.transform(img)
-            imgs[key] = img    
+            domain_label = self.domain_list.index(key)
+            imgs[key] = img, domain_label
         return imgs
