@@ -9,5 +9,5 @@ python3 panda_vanilla.py \
     --interval 10 \
     --data_root ~/data\
     --domain clean-gaussian_noise \
-    --batch_size 32 \
+    --batch_size 64 \
     # --ewc 
