@@ -66,7 +66,7 @@ def get_score(model, device, train_feature_space, testloader, method, class_idx=
     with torch.no_grad():
         for (imgs, labels) in testloader:
             imgs = imgs.to(device)
-            if 'difex' in method:
+            if 'difex' in method or 'disentangle' in method:
                 features, _ = model(imgs)
             else:
                 features = model(imgs)
