@@ -51,8 +51,8 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
         
         # domain classificationの精度を計算
-        acc_dict = eval_domain_classification(model_dz, device, args.domain_list)
-        print(acc_dict)
+        acc_dict, all_acc = eval_domain_classification(model_dz, device, args.domain_list)
+        print(acc_dict, all_acc)
         
         if auc > best_auc:
             best_epoch = epoch
@@ -63,7 +63,11 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
         if (epoch+1) % args.interval == 0:
             torch.save(model, osp.join(model_save_dir, f'model_{epoch+1}.pth'))
             np.save(osp.join(feature_save_dir, f'train_feature_{epoch+1}.npy'), feature_space)
-    plot_loss_evolution(loss_list, osp.join(loss_save_dir, 'loss.png'))
+        args.writer.add_scalar('total loss', running_loss, epoch)
+        args.writer.add_scalar('domain loss', running_domain_loss, epoch)
+        args.writer.add_scalars('each loss', running_loss_dict, epoch)
+        args.writer.add_scalars('each acc', acc_dict, epoch)
+    # plot_loss_evolution(loss_list, osp.join(loss_save_dir, 'loss.png'))
         
     print(f'best_eposh is {best_epoch}')
         
@@ -178,6 +182,7 @@ def eval_domain_classification(model_ds, device, domain_list):
     model_ds.eval()
     acc_dict = {}
     dataloaders = utils.get_domain_loaders(domain_list, args)
+    all_acc = 0
     for domain, dataloader in dataloaders.items():
         n_samples = 0
         n_hits = 0
@@ -192,7 +197,9 @@ def eval_domain_classification(model_ds, device, domain_list):
             n_samples += samples
         acc = n_hits / n_samples
         acc_dict[domain] = acc
-    return acc_dict
+        all_acc += acc
+    all_acc /= len(domain_list)
+    return acc_dict, all_acc
 
 def main(args):
     print('Dataset: {}, Normal Label: {}, LR: {}'.format(args.dataset, args.label, args.lr))
@@ -262,4 +269,10 @@ if __name__ == "__main__":
     with open(save_json_path, "w") as f:
         json.dump(vars(args), f, indent=2)
         
-        main(args)
+    tensorboard_dir = osp.join(args.output_dir, 'tensorboard_logs')
+    if not osp.exists(tensorboard_dir):
+        os.makedirs(tensorboard_dir)
+    writer = SummaryWriter(tensorboard_dir)
+    args.writer = writer
+        
+    main(args)
