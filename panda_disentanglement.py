@@ -17,19 +17,13 @@ from utils import fix_seed
 from torchvision.utils import save_image
 from matplotlib import pyplot as plt
 
-from torch.utils.tensorboard import SummaryWriter
-
-def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_loss):
+def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    model_dz.eval()
     auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
-    params_model = list(model.parameters())
-    params_model_dz = list(model_dz.parameters())
-    optimizer = optim.SGD(params_model+params_model_dz, lr=args.lr, weight_decay=0.00005, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0) # 5000*512
     criterion = CompactnessLoss(center.to(device)) # 512
-    criterion_ds = torch.nn.CrossEntropyLoss()
     model_save_dir = osp.join(args.output_dir, 'model')
     feature_save_dir = osp.join(args.output_dir, 'feature')
     loss_save_dir = osp.join(args.output_dir, 'loss')
@@ -42,18 +36,12 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
     if not osp.exists(loss_save_dir):
         os.makedirs(loss_save_dir)
     for epoch in range(args.epochs):
-        running_loss, running_loss_dict, running_domain_loss = run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, device, args.ewc, ewc_loss, args.domain_list)
+        running_loss, running_loss_dict = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.domain_list)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
         print(running_loss_dict)
-        print('domain_loss:', running_domain_loss)
         loss_list.append(running_loss_dict)
         auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
-        
-        # domain classificationの精度を計算
-        acc_dict = eval_domain_classification(model_dz, device, args.domain_list)
-        print(acc_dict)
-        
         if auc > best_auc:
             best_epoch = epoch
             best_auc = auc
@@ -69,11 +57,9 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
         
 
 
-def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, device, ewc, ewc_loss, domain_list):
+def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss, domain_list):
     running_loss = 0.0
     running_loss_dict = {}
-    running_domain_loss = 0.0
-    
     for domain in domain_list:
         running_loss_dict[domain] = 0.0
     for i, img_dict in enumerate(train_loader):
@@ -83,20 +69,17 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
             loss_dict[domain] = 0.0
         
         img_list = []
-        label_list = []
         
         for domain in domain_list:
-            img_list.append(img_dict[domain][0])
-            label_list.append(img_dict[domain][1])      
+            img_list.append(img_dict[domain])            
             
         imgs = torch.cat(img_list, dim=0)
 
         images = imgs.to(device)
-        labels = torch.cat(label_list, dim=0).to(device)
 
         optimizer.zero_grad()
 
-        features, _ = model(images)
+        features = model(images)
         
         num_per_class = features.shape[0]//len(domain_list)
         for i, domain in enumerate(domain_list):
@@ -104,12 +87,9 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
             loss_dict[domain] += criterion(features_in_domain)
             
         loss = sum(loss_dict.values())
-        
-        if len(domain_list) > 1:
-            features_ds, logit_ds = model_dz(images)
-            loss_ds = criterion_ds(logit_ds, labels)
-            running_domain_loss += loss_ds.item()
-            loss += loss_ds
+        # loss_dict['total'] = loss
+
+        # loss = criterion(features)
 
         if ewc:
             loss += ewc_loss(model)
@@ -127,7 +107,7 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
             
     for domain in domain_list:
         running_loss_dict[domain] /= i + 1
-    return running_loss / (i + 1), running_loss_dict, running_domain_loss / (i + 1)
+    return running_loss / (i + 1), running_loss_dict
 
 
 def get_score(model, device, train_loader, test_loader, domain_list):
@@ -136,17 +116,17 @@ def get_score(model, device, train_loader, test_loader, domain_list):
         for img_dict in tqdm(train_loader, desc='Train set feature extracting'):
             img_list = []
             for domain in domain_list:
-                img_list.append(img_dict[domain][0])
+                img_list.append(img_dict[domain])
             imgs = torch.cat(img_list, dim=0)
             imgs = imgs.to(device)
-            features, logit = model(imgs)
+            features = model(imgs)
             train_feature_space.append(features)
         train_feature_space = torch.cat(train_feature_space, dim=0).contiguous().cpu().numpy()
     test_feature_space = []
     with torch.no_grad():
         for (imgs, _) in tqdm(test_loader, desc='Test set feature extracting'):
             imgs = imgs.to(device)
-            features, logit = model(imgs)
+            features = model(imgs)
             test_feature_space.append(features)
         test_feature_space = torch.cat(test_feature_space, dim=0).contiguous().cpu().numpy()
         test_labels = test_loader.dataset.targets
@@ -173,40 +153,13 @@ def plot_loss_evolution(loss_data_list, save_path='loss_evolution.png'):
 
     plt.savefig(save_path)
     plt.close()
-    
-def eval_domain_classification(model_ds, device, domain_list):
-    model_ds.eval()
-    acc_dict = {}
-    dataloaders = utils.get_domain_loaders(domain_list, args)
-    for domain, dataloader in dataloaders.items():
-        n_samples = 0
-        n_hits = 0
-        for img, domain_label in dataloader:
-            img = img.to(device)
-            domain_label = domain_label.to(device)
-            _, logit = model_ds(img)
-            pred = torch.argmax(logit, dim=1)
-            hits = (pred == domain_label).sum().item()
-            n_hits += hits
-            samples = len(domain_label)
-            n_samples += samples
-        acc = n_hits / n_samples
-        acc_dict[domain] = acc
-    return acc_dict
 
 def main(args):
     print('Dataset: {}, Normal Label: {}, LR: {}'.format(args.dataset, args.label, args.lr))
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
-    train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label, batch_size=args.batch_size, args=args)
-    
     print(device)
     model = utils.get_resnet_model(resnet_type=args.resnet_type)
     model = model.to(device)
-    
-    model_ds = utils.get_resnet_model(resnet_type=args.resnet_type, pretrained=False)
-    model_ds.fc = torch.nn.Linear(model_ds.fc.in_features, len(args.domain_list))
-    model_ds = model_ds.to(device)
 
     ewc_loss = None
 
@@ -219,9 +172,13 @@ def main(args):
         # for name, _ in model.named_parameters():
         #     print(name, _.shape, fisher[name].shape)
         ewc_loss = EWCLoss(frozen_model, fisher)
+
         
+        
+
     utils.freeze_parameters(model)
-    train_model(model, model_ds, train_loader, test_loader, device, args, ewc_loss)
+    train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label, batch_size=args.batch_size, args=args)
+    train_model(model, train_loader, test_loader, device, args, ewc_loss)
 
 
 if __name__ == "__main__":
@@ -234,7 +191,6 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=1e-2, help='The initial learning rate.')
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
-    parser.add_argument('--batch_size_test', default=100, type=int)
     parser.add_argument('--output_dir', type=str, default=str)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--noise', type=str, default=None)
