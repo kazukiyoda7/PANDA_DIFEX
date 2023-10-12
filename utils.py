@@ -9,6 +9,7 @@ from corruption import corrupt_image_cifar10
 from torch.utils.data import Dataset
 from imagecorruptions import corrupt
 from PIL import Image
+import os
 
 mvtype = ['bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut', 'leather',
         'metal_nut', 'pill', 'screw', 'tile', 'toothbrush', 'transistor',
@@ -185,3 +186,49 @@ class CustomDataset(Dataset):
             domain_label = self.domain_list.index(key)
             imgs[key] = img, domain_label
         return imgs
+    
+
+class DomainDataset(Dataset):
+    def __init__(self, id_class, domain_list, domain, transform_list=None, severity=1, data_root='~/data'):
+        self.domain = domain
+        self.domain_list = domain_list
+        if transform_list is not None:
+            self.transform = transforms.Compose(transform_list)
+        else:
+            self.transform = None
+        self.severity = severity
+        
+        if domain == 'clean':
+            dataset = torchvision.datasets.CIFAR10(root=data_root, train=False, download=True, transform=False)
+            data = dataset.data
+            label = dataset.targets
+        else:
+            path = os.path.join(data_root, 'CIFAR-10-C', domain+'.npy')
+            data = np.load(path)
+            data = data[10000*(severity-1):10000*(severity-1)+10000]
+            label_path = os.path.join(data_root, 'CIFAR-10-C', 'labels.npy')
+            label = np.load(label_path)
+            label = label[10000*(severity-1):10000*(severity-1)+10000]
+        idx = np.array(label) == id_class
+        data = data[idx]
+        self.data = data
+            
+        
+    def __len__(self):
+        return len(self.data)
+            
+    def __getitem__(self, idx):
+        img = self.data[idx]
+        img = Image.fromarray(img)
+        domain_label = self.domain_list.index(self.domain)
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, domain_label
+    
+def get_domain_loaders(domain_list, args):
+    dataloaders = {}
+    for domain in domain_list:
+        dataset = DomainDataset(args.label, domain_list, domain, transform_list=transform_list, severity=args.severity, data_root=args.data_root)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size_test, shuffle=True, num_workers=2, drop_last=False)
+        dataloaders[domain] = dataloader
+    return dataloaders

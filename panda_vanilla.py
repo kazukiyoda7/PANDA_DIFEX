@@ -17,6 +17,8 @@ from utils import fix_seed
 from torchvision.utils import save_image
 from matplotlib import pyplot as plt
 
+from torch.utils.tensorboard import SummaryWriter
+
 def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
     model_dz.eval()
@@ -47,6 +49,11 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
         loss_list.append(running_loss_dict)
         auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
+        
+        # domain classificationの精度を計算
+        acc_dict = eval_domain_classification(model_dz, device, args.domain_list)
+        print(acc_dict)
+        
         if auc > best_auc:
             best_epoch = epoch
             best_auc = auc
@@ -166,6 +173,26 @@ def plot_loss_evolution(loss_data_list, save_path='loss_evolution.png'):
 
     plt.savefig(save_path)
     plt.close()
+    
+def eval_domain_classification(model_ds, device, domain_list):
+    model_ds.eval()
+    acc_dict = {}
+    dataloaders = utils.get_domain_loaders(domain_list, args)
+    for domain, dataloader in dataloaders.items():
+        n_samples = 0
+        n_hits = 0
+        for img, domain_label in dataloader:
+            img = img.to(device)
+            domain_label = domain_label.to(device)
+            _, logit = model_ds(img)
+            pred = torch.argmax(logit, dim=1)
+            hits = (pred == domain_label).sum().item()
+            n_hits += hits
+            samples = len(domain_label)
+            n_samples += samples
+        acc = n_hits / n_samples
+        acc_dict[domain] = acc
+    return acc_dict
 
 def main(args):
     print('Dataset: {}, Normal Label: {}, LR: {}'.format(args.dataset, args.label, args.lr))
@@ -207,6 +234,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=1e-2, help='The initial learning rate.')
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
+    parser.add_argument('--batch_size_test', default=100, type=int)
     parser.add_argument('--output_dir', type=str, default=str)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--noise', type=str, default=None)
