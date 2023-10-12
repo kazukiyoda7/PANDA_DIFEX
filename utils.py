@@ -50,20 +50,20 @@ class NoiseAug(object):
         x = corrupt_image_cifar10(x, severity=self.sev, corruption_name=self.aug)
         return x
 
-def get_resnet_model(resnet_type=152):
+def get_resnet_model(resnet_type=152, pretrained=True):
     """
     A function that returns the required pre-trained resnet model
     :param resnet_number: the resnet type
     :return: the pre-trained model
     """
     if resnet_type == 18:
-        return ResNet.resnet18(pretrained=True, progress=True)
+        return ResNet.resnet18(pretrained=pretrained, progress=True)
     elif resnet_type == 50:
-        return ResNet.wide_resnet50_2(pretrained=True, progress=True)
+        return ResNet.wide_resnet50_2(pretrained=pretrained, progress=True)
     elif resnet_type == 101:
-        return ResNet.resnet101(pretrained=True, progress=True)
+        return ResNet.resnet101(pretrained=pretrained, progress=True)
     else:  #152
-        return ResNet.resnet152(pretrained=True, progress=True)
+        return ResNet.resnet152(pretrained=pretrained, progress=True)
 
 
 def freeze_model(model):

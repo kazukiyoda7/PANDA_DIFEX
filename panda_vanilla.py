@@ -22,7 +22,9 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
     model_dz.eval()
     auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
+    params_model = list(model.parameters())
+    params_model_dz = list(model_dz.parameters())
+    optimizer = optim.SGD(params_model+params_model_dz, lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0) # 5000*512
     criterion = CompactnessLoss(center.to(device)) # 512
     criterion_ds = torch.nn.CrossEntropyLoss()
@@ -41,7 +43,7 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
         running_loss, running_loss_dict, running_domain_loss = run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, device, args.ewc, ewc_loss, args.domain_list)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
         print(running_loss_dict)
-        print(running_domain_loss)
+        print('domain_loss:', running_domain_loss)
         loss_list.append(running_loss_dict)
         auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
@@ -95,7 +97,6 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
             loss_dict[domain] += criterion(features_in_domain)
             
         loss = sum(loss_dict.values())
-        loss = 0
         
         if len(domain_list) > 1:
             features_ds, logit_ds = model_dz(images)
@@ -114,8 +115,8 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
 
         running_loss += loss.item()
         
-        # for domain in domain_list:
-        #     running_loss_dict[domain] += loss_dict[domain].item()
+        for domain in domain_list:
+            running_loss_dict[domain] += loss_dict[domain].item()
             
     for domain in domain_list:
         running_loss_dict[domain] /= i + 1
@@ -176,7 +177,7 @@ def main(args):
     model = utils.get_resnet_model(resnet_type=args.resnet_type)
     model = model.to(device)
     
-    model_ds = utils.get_resnet_model(resnet_type=args.resnet_type)
+    model_ds = utils.get_resnet_model(resnet_type=args.resnet_type, pretrained=False)
     model_ds.fc = torch.nn.Linear(model_ds.fc.in_features, len(args.domain_list))
     model_ds = model_ds.to(device)
 
