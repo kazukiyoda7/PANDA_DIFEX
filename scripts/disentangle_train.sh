@@ -10,5 +10,6 @@ python3 panda_disentangle.py \
     --data_root ~/data\
     --domain clean-gaussian_noise \
     --batch_size 64 \
-    --alpha 2
+    --alpha 10 \
+    --beta 1 \
     # --ewc 

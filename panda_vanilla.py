@@ -19,17 +19,14 @@ from matplotlib import pyplot as plt
 
 from torch.utils.tensorboard import SummaryWriter
 
-def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_loss):
+def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    model_dz.eval()
     auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
     params_model = list(model.parameters())
-    params_model_dz = list(model_dz.parameters())
-    optimizer = optim.SGD(params_model+params_model_dz, lr=args.lr, weight_decay=0.00005, momentum=0.9)
+    optimizer = optim.SGD(params_model, lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0) # 5000*512
     criterion = CompactnessLoss(center.to(device)) # 512
-    criterion_ds = torch.nn.CrossEntropyLoss()
     model_save_dir = osp.join(args.output_dir, 'model')
     feature_save_dir = osp.join(args.output_dir, 'feature')
     loss_save_dir = osp.join(args.output_dir, 'loss')
@@ -42,17 +39,12 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
     if not osp.exists(loss_save_dir):
         os.makedirs(loss_save_dir)
     for epoch in range(args.epochs):
-        running_loss, running_loss_dict, running_domain_loss = run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, device, args.ewc, ewc_loss, args.domain_list)
+        running_loss, running_loss_dict = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss, args.domain_list)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
         print(running_loss_dict)
-        print('domain_loss:', running_domain_loss)
         loss_list.append(running_loss_dict)
         auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
-        
-        # domain classificationの精度を計算
-        acc_dict, all_acc = eval_domain_classification(model_dz, device, args.domain_list)
-        print(acc_dict, all_acc)
         
         if auc > best_auc:
             best_epoch = epoch
@@ -64,19 +56,16 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
             torch.save(model, osp.join(model_save_dir, f'model_{epoch+1}.pth'))
             np.save(osp.join(feature_save_dir, f'train_feature_{epoch+1}.npy'), feature_space)
         args.writer.add_scalar('total loss', running_loss, epoch)
-        args.writer.add_scalar('domain loss', running_domain_loss, epoch)
         args.writer.add_scalars('each loss', running_loss_dict, epoch)
-        args.writer.add_scalars('each acc', acc_dict, epoch)
-    # plot_loss_evolution(loss_list, osp.join(loss_save_dir, 'loss.png'))
+    plot_loss_evolution(loss_list, osp.join(loss_save_dir, 'loss.png'))
         
     print(f'best_eposh is {best_epoch}')
         
 
 
-def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, device, ewc, ewc_loss, domain_list):
+def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss, domain_list):
     running_loss = 0.0
     running_loss_dict = {}
-    running_domain_loss = 0.0
     
     for domain in domain_list:
         running_loss_dict[domain] = 0.0
@@ -108,12 +97,6 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
             loss_dict[domain] += criterion(features_in_domain)
             
         loss = sum(loss_dict.values())
-        
-        if len(domain_list) > 1:
-            features_ds, logit_ds = model_dz(images)
-            loss_ds = criterion_ds(logit_ds, labels)
-            running_domain_loss += loss_ds.item()
-            loss += loss_ds
 
         if ewc:
             loss += ewc_loss(model)
@@ -131,7 +114,7 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
             
     for domain in domain_list:
         running_loss_dict[domain] /= i + 1
-    return running_loss / (i + 1), running_loss_dict, running_domain_loss / (i + 1)
+    return running_loss / (i + 1), running_loss_dict
 
 
 def get_score(model, device, train_loader, test_loader, domain_list):
@@ -210,10 +193,6 @@ def main(args):
     print(device)
     model = utils.get_resnet_model(resnet_type=args.resnet_type)
     model = model.to(device)
-    
-    model_ds = utils.get_resnet_model(resnet_type=args.resnet_type, pretrained=False)
-    model_ds.fc = torch.nn.Linear(model_ds.fc.in_features, len(args.domain_list))
-    model_ds = model_ds.to(device)
 
     ewc_loss = None
 
@@ -228,7 +207,7 @@ def main(args):
         ewc_loss = EWCLoss(frozen_model, fisher)
         
     utils.freeze_parameters(model)
-    train_model(model, model_ds, train_loader, test_loader, device, args, ewc_loss)
+    train_model(model, train_loader, test_loader, device, args, ewc_loss)
 
 
 if __name__ == "__main__":

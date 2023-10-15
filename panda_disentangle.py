@@ -26,6 +26,7 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
     params_model = list(model.parameters())
     params_model_dz = list(model_dz.parameters())
+    # optimizer = optim.SGD(params_model_dz, lr=args.lr, weight_decay=0.00005, momentum=0.9)
     optimizer = optim.SGD(params_model+params_model_dz, lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0) # 5000*512
     criterion = CompactnessLoss(center.to(device)) # 512
@@ -43,10 +44,11 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
     if not osp.exists(loss_save_dir):
         os.makedirs(loss_save_dir)
     for epoch in range(args.epochs):
-        running_loss, running_loss_dict, running_domain_loss = run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, criteiron_disentangle, device, args.ewc, ewc_loss, args.domain_list)
+        running_loss, running_loss_dict, running_domain_loss, running_disentangle_loss = run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, criteiron_disentangle, device, args.ewc, ewc_loss, args.domain_list)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
         print(running_loss_dict)
         print('domain_loss:', running_domain_loss)
+        print('disentangle_loss:', running_disentangle_loss)
         loss_list.append(running_loss_dict)
         auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
@@ -68,6 +70,7 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
         args.writer.add_scalar('domain loss', running_domain_loss, epoch)
         args.writer.add_scalars('each loss', running_loss_dict, epoch)
         args.writer.add_scalars('each acc', acc_dict, epoch)
+        args.writer.add_scalar('disentangle loss', running_disentangle_loss, epoch)
     # plot_loss_evolution(loss_list, osp.join(loss_save_dir, 'loss.png'))
         
     print(f'best_eposh is {best_epoch}')
@@ -78,6 +81,7 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
     running_loss = 0.0
     running_loss_dict = {}
     running_domain_loss = 0.0
+    runnig_disentangle_loss = 0.0
     
     for domain in domain_list:
         running_loss_dict[domain] = 0.0
@@ -114,10 +118,11 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
         if len(domain_list) > 1:
             features_ds, logits_ds = model_dz(images)
             loss_ds = criterion_ds(logits_ds, labels)
-            running_domain_loss += loss_ds.item()
-            loss += loss_ds*args.alpha
+            running_domain_loss += loss_ds.item()*args.alpha
+            loss += loss_ds
 
-        loss_disentangle = criterion_disentangle(features, features_ds).mean()
+        loss_disentangle = criterion_disentangle(features, features_ds).mean()*args.beta
+        runnig_disentangle_loss += loss_disentangle.item()
         loss += loss_disentangle
 
         if ewc:
@@ -136,7 +141,7 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
             
     for domain in domain_list:
         running_loss_dict[domain] /= i + 1
-    return running_loss / (i + 1), running_loss_dict, running_domain_loss / (i + 1)
+    return running_loss / (i + 1), running_loss_dict, running_domain_loss / (i + 1), runnig_disentangle_loss / (i + 1)
 
 
 def get_score(model, device, train_loader, test_loader, domain_list):

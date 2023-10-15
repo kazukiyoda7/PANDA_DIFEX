@@ -53,7 +53,7 @@ for s in range(1, 6):
     box_save_dir = os.path.join(save_dir, 'box')
     if not os.path.exists(box_save_dir):
         os.makedirs(box_save_dir)
-    plt.savefig(os.path.join(box_save_dir, f'box-severity{severity}.png'))
+    plt.savefig(os.path.join(box_save_dir, f'box-ood{ood_class}-severity{severity}.png'))
 
 
     # median --------------------------------------------------------------
@@ -85,7 +85,7 @@ for s in range(1, 6):
     median_save_dir = os.path.join(save_dir, 'median')
     if not os.path.exists(median_save_dir):
         os.makedirs(median_save_dir)
-    plt.savefig(os.path.join(median_save_dir, f'median-severity{severity}.png'))
+    plt.savefig(os.path.join(median_save_dir, f'median-ood{ood_class}-severity{severity}.png'))
 
     # # mean-fix --------------------------------------------------------------
     # means = [np.mean(score_list[key]) for key in score_list.keys()]

@@ -6,7 +6,7 @@ python3 panda_difex.py \
     --resnet_type 18 \
     --output_dir train_results \
     --seed 42 \
-    --severity 1 \
+    --severity 5 \
     --interval 10 \
     --lr_fourier 1e-4 \
     --alpha 0 \

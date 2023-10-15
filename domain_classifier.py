@@ -35,8 +35,6 @@ def train(model, train_loader, test_loader, device, args):
             imgs = torch.cat(img_list, dim=0).to(device)
             labels = torch.cat(domain_label_list, dim=0).to(device)
             
-            # save_image(imgs, "train.png")
-            
             optimizer.zero_grad()
             
             fefeatures, logits = model(imgs)
@@ -63,7 +61,6 @@ def eval_domain_classification(model_ds, device, domain_list):
         n_hits = 0
         for img, domain_label in dataloader:
             img = img.to(device)
-            save_image(img[:8], f"test-{domain}.png")
             domain_label = domain_label.to(device)
             _, logit = model_ds(img)
             pred = torch.argmax(logit, dim=1)
@@ -92,10 +89,10 @@ if __name__ == "__main__":
     parser.add_argument('--output_dir', type=str, default=str)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--noise', type=str, default=None)
-    parser.add_argument('--severity', type=int, default=3)
+    parser.add_argument('--severity', type=int, default=1)
     parser.add_argument('--interval', type=int, default=5)
     parser.add_argument('--data_root', type=str, default='/home/yoda/data/')
-    parser.add_argument('--domain', type=str, default='clean-gaussian_noise-fog')
+    parser.add_argument('--domain', type=str, default='clean-gaussian_noise')
     
     args = parser.parse_args()
     
