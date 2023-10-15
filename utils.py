@@ -155,11 +155,14 @@ def clip_gradient(optimizer, grad_clip):
                 continue
             param.grad.data.clamp_(-grad_clip, grad_clip)
 
-def fix_seed(seed):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+def fix_seed(seed):    
     random.seed(seed)
-    torch.backends.cudnn.benchmark = True
+    np.random.seed(seed)
+    torch.manual_seed(seed) 
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 class CustomDataset(Dataset):
     def __init__(self, idx_dict, trainset, domain_list, transform_list=None, severity=1):

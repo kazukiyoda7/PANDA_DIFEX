@@ -1,4 +1,4 @@
-python3 panda_vanilla.py \
+python3 panda_disentangle.py \
     --dataset cifar10 \
     --label 0 \
     --epochs 30 \
@@ -9,4 +9,7 @@ python3 panda_vanilla.py \
     --interval 10 \
     --data_root ~/data\
     --domain clean-gaussian_noise \
-    --batch_size 32 \
+    --batch_size 64 \
+    --alpha 10 \
+    --beta 1 \
+    # --ewc 

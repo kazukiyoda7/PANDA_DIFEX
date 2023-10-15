@@ -66,10 +66,7 @@ def get_score(model, device, train_feature_space, testloader, method, class_idx=
     with torch.no_grad():
         for (imgs, labels) in testloader:
             imgs = imgs.to(device)
-            if 'difex' in method:
-                features, _ = model(imgs)
-            else:
-                features = model(imgs)
+            features, _ = model(imgs)
             test_feature_space.append(features)
             batch_size = imgs.shape[0]
             for j in range(batch_size):

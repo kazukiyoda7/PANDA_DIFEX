@@ -15,8 +15,8 @@ eval_semantic_shift() {
     bash scripts/eval/make_graph.sh $method
 }
 
-make_graph2() {
-    bash scripts/eval/make_graph2.sh $method
+make_graph_ood() {
+    bash scripts/eval/make_graph_ood.sh $method
 }
 
 for operation in "$@"; do
@@ -27,11 +27,11 @@ for operation in "$@"; do
         eval_semantic_shift)
             eval_semantic_shift
             ;;
-        make_graph2)
-            make_graph2
+        make_graph_ood)
+            make_graph_ood
             ;;
         *)
-            echo "Invalid operation: $operation. Choose from [calc_score, eval_semantic_shift, make_graph2]"
+            echo "Invalid operation: $operation. Choose from [calc_score, eval_semantic_shift, make_graph_ood]"
             ;;
     esac
 done
