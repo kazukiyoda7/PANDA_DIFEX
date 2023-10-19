@@ -164,7 +164,7 @@ def plot_loss_evolution(loss_data_list, save_path='loss_evolution.png'):
 def eval_domain_classification(model_ds, device, domain_list):
     model_ds.eval()
     acc_dict = {}
-    dataloaders = utils.get_domain_loaders(domain_list, args)
+    dataloaders = utils.get_domain_loaders(domain_list, args.label, args)
     all_acc = 0
     for domain, dataloader in dataloaders.items():
         n_samples = 0

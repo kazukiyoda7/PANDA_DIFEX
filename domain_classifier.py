@@ -40,7 +40,7 @@ def train(model, train_loader, test_loader, device, args):
             
             optimizer.zero_grad()
             
-            fefeatures, logits = model(imgs)
+            features, logits = model(imgs)
             
             loss = criterion(logits, labels)
             loss.backward()
@@ -57,7 +57,7 @@ def train(model, train_loader, test_loader, device, args):
 def eval_domain_classification(model_ds, device, domain_list):
     model_ds.eval()
     acc_dict = {}
-    dataloaders = utils.get_domain_loaders(domain_list, args)
+    dataloaders = utils.get_domain_loaders(domain_list, args.label, args)
     all_acc = 0
     for domain, dataloader in dataloaders.items():
         n_samples = 0
@@ -124,21 +124,21 @@ if __name__ == "__main__":
     
     utils.fix_seed(args.seed)
     
-    # main(args)
+    main(args)
     
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=1)
+    # study = optuna.create_study(direction="maximize")
+    # study.optimize(objective, n_trials=100)
 
-    best_params = study.best_params
+    # best_params = study.best_params
 
-    with open("best_params.txt", "w") as f:
-        for param, value in best_params.items():
-            f.write(f"{param}: {value}\n")
+    # with open("best_params.txt", "w") as f:
+    #     for param, value in best_params.items():
+    #         f.write(f"{param}: {value}\n")
             
-    with open("all_trials.txt", "w") as f:
-        for trial in study.trials:
-            f.write(f"Trial {trial.number}\n")
-            for param, value in trial.params.items():
-                f.write(f"{param}: {value}\n")
-            f.write(f"Value: {trial.value}\n\n")
+    # with open("all_trials.txt", "w") as f:
+    #     for trial in study.trials:
+    #         f.write(f"Trial {trial.number}\n")
+    #         for param, value in trial.params.items():
+    #             f.write(f"{param}: {value}\n")
+    #         f.write(f"Value: {trial.value}\n\n")
 

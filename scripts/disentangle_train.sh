@@ -9,7 +9,10 @@ python3 panda_disentangle.py \
     --interval 10 \
     --data_root ~/data\
     --domain clean-gaussian_noise \
-    --batch_size 64 \
-    --alpha 10 \
+    --batch_size 16 \
+    --alpha 1 \
     --beta 1 \
+    --lr 1e-3 \
+    --optuna \
+    --n_trials 30 \
     # --ewc 

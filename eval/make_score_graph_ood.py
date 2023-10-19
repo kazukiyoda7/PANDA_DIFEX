@@ -10,6 +10,7 @@ def get_args():
     parser.add_argument('--output_dir', type=str, required=True)
     parser.add_argument('--id_class', type=int, required=True)
     parser.add_argument('--ood_class', type=int, default=1)
+    parser.add_argument('--eval_domain', type=str, default='all')
     args = parser.parse_args()
     return args
     
@@ -22,6 +23,15 @@ cifar10_class = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog',
 
 id_class = args.id_class
 ood_class = args.ood_class
+
+corruption_names = args.eval_domain.split('-')
+if 'all' in corruption_names:
+    corruption_names = corruption_list
+else:
+    assert all(c in corruption_list for c in corruption_names), "corruption name is incorrect"
+print(corruption_names)
+
+corruption_list = corruption_names
 
 save_dir = os.path.join(args.output_dir, 'graph', 'covariate', str(id_class))
 if not os.path.exists(save_dir):
