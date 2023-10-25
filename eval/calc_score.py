@@ -80,7 +80,7 @@ def get_score(model, device, train_feature_space, testloader, method, class_idx=
 #---------------------------------------------------------------------------
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def calc_score(model_path, train_feature_path, args, device):
+def calc_score(model_path, train_feature_path, args, device, corruption_list):
     model = torch.load(model_path)
     model.eval()
     train_feature_space = np.load(train_feature_path)
@@ -92,6 +92,8 @@ def calc_score(model_path, train_feature_path, args, device):
     else:
         assert all(c in corruption_list for c in corruption_names), "corruption name is incorrect"
     print(corruption_names)
+    
+    corruption_list = corruption_names
     
     for s in range(1, 6):
         for i in range(10):
@@ -105,4 +107,4 @@ def calc_score(model_path, train_feature_path, args, device):
                     os.makedirs(score_save_dir)
                 np.save(os.path.join(score_save_dir, f'{k}.npy'), score_out)
 
-calc_score(args.model_path, args.feature_path, args, device)
+calc_score(args.model_path, args.feature_path, args, device, corruption_list)

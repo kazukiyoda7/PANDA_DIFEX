@@ -5,11 +5,11 @@ import numpy as np
 import faiss
 import ResNet
 import random
-from corruption import corrupt_image_cifar10
 from torch.utils.data import Dataset
 from imagecorruptions import corrupt
 from PIL import Image
 import os
+from corruption.cifar10c import CIFAR10C
 
 mvtype = ['bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut', 'leather',
         'metal_nut', 'pill', 'screw', 'tile', 'toothbrush', 'transistor',
@@ -43,13 +43,6 @@ transform_gray = transforms.Compose([
                                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
                                 ])
 
-class NoiseAug(object):
-    def __init__(self, aug=None, sev=1):
-        self.aug = aug
-        self.sev = sev
-    def __call__(self, x):
-        x = corrupt_image_cifar10(x, severity=self.sev, corruption_name=self.aug)
-        return x
 
 def get_resnet_model(resnet_type=152, pretrained=True):
     """
@@ -228,10 +221,78 @@ class DomainDataset(Dataset):
             img = self.transform(img)
         return img, domain_label
     
-def get_domain_loaders(domain_list, args):
+def get_domain_loaders(domain_list, id_class, args):
     dataloaders = {}
     for domain in domain_list:
-        dataset = DomainDataset(args.label, domain_list, domain, transform_list=transform_list, severity=args.severity, data_root=args.data_root)
+        dataset = DomainDataset(id_class, domain_list, domain, transform_list=transform_list, severity=args.severity, data_root=args.data_root)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size_test, shuffle=True, num_workers=2, drop_last=False)
         dataloaders[domain] = dataloader
     return dataloaders
+
+def get_each_domain_testloader(root, corruption_name, severity, label, id=True):
+    transform = transform_color
+    if corruption_name == "clean":
+        testset = torchvision.datasets.CIFAR10(root=root, train=False, download=False, transform=transform)
+    else:
+        testset = CIFAR10C(root=root, corruption_name=corruption_name, severity=severity, transform=transform)
+    if id:
+        testset = SplitInDataset(testset, label)
+    else:
+        testset = SplitOutDataset(testset, label)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=1000, shuffle=False, num_workers=4)
+    return testloader
+
+def get_domain_testloaders(root, domain_list, severity, label):
+    id_loaders = []
+    ood_loaders = []
+    for domain in domain_list:
+        id_loader = get_each_domain_testloader(root, domain, severity, label, id=True)
+        id_loaders.append(id_loader)
+        ood_loader = get_each_domain_testloader(root, domain, severity, label, id=False)
+        ood_loaders.append(ood_loader)
+    return id_loaders, ood_loaders
+
+class SplitInDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset, id_class):
+        self.data = dataset.data[np.array(dataset.targets) ==  id_class]
+        self.targets = np.array([0]*self.data.shape[0])
+        self.transform = dataset.transform
+        self.target_transform = dataset.target_transform
+        self.id_class = id_class
+
+    def __getitem__(self, index):
+        img = self.data[index]
+        target = self.targets[index]
+        if self.transform is not None:
+            img = Image.fromarray(img)
+            img = self.transform(img)
+        if self.target_transform is not None: 
+            target = self.target_transform(target)
+        return img, target
+
+    def __len__(self):
+        # 2つのデータセットのサイズが同じであることを前提として、サイズを返す
+        return len(self.targets)
+    
+    
+class SplitOutDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset, id_class):
+        self.data = dataset.data[np.array(dataset.targets) !=  id_class]
+        self.targets = np.array([1]*self.data.shape[0])
+        self.transform = dataset.transform
+        self.target_transform = dataset.target_transform
+        self.id_class = id_class
+
+    def __getitem__(self, index):
+        img = self.data[index]
+        target = self.targets[index]
+        if self.transform is not None:
+            img = Image.fromarray(img)
+            img = self.transform(img)
+        if self.target_transform is not None: 
+            target = self.target_transform(target)
+        return img, target
+
+    def __len__(self):
+        # 2つのデータセットのサイズが同じであることを前提として、サイズを返す
+        return len(self.targets)

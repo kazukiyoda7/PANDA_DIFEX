@@ -1,3 +1,4 @@
 __pycache__/
 train_results/
 eval_results/
+optuna_result/

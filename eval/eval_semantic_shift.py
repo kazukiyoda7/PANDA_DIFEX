@@ -59,13 +59,16 @@ transform_color = transforms.Compose([transforms.Resize(256),
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def eval_semantic_shift(id_class, args, device):
+def eval_semantic_shift(id_class, args, device, corruption_list):
     corruption_names = args.eval_domain.split('-')
     if 'all' in corruption_names:
         corruption_names = corruption_list
     else:
         assert all(c in corruption_list for c in corruption_names), "corruption name is incorrect"
     print(corruption_names)
+    
+    corruption_list = corruption_names
+    
     transform = transform_color
     
     for s in range(1, 6):
@@ -115,4 +118,4 @@ def eval_semantic_shift(id_class, args, device):
                 
             print('result_outputed')
         
-eval_semantic_shift(args.label, args, device)
+eval_semantic_shift(args.label, args, device ,corruption_list)

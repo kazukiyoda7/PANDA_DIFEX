@@ -3,6 +3,7 @@ import utils
 import torch.optim as optim
 import argparse
 from torchvision.utils import save_image
+import optuna
 
 def main(args):
     
@@ -15,6 +16,8 @@ def main(args):
     model = model.to(device)
     
     train(model, train_loader, test_loader, device, args)
+    
+    return model, device
     
     
 def train(model, train_loader, test_loader, device, args):
@@ -37,7 +40,7 @@ def train(model, train_loader, test_loader, device, args):
             
             optimizer.zero_grad()
             
-            fefeatures, logits = model(imgs)
+            features, logits = model(imgs)
             
             loss = criterion(logits, labels)
             loss.backward()
@@ -54,7 +57,7 @@ def train(model, train_loader, test_loader, device, args):
 def eval_domain_classification(model_ds, device, domain_list):
     model_ds.eval()
     acc_dict = {}
-    dataloaders = utils.get_domain_loaders(domain_list, args)
+    dataloaders = utils.get_domain_loaders(domain_list, args.label, args)
     all_acc = 0
     for domain, dataloader in dataloaders.items():
         n_samples = 0
@@ -73,6 +76,30 @@ def eval_domain_classification(model_ds, device, domain_list):
         all_acc += acc
     all_acc /= len(domain_list)
     return acc_dict, all_acc
+
+def objective(trial):
+    # ハイパーパラメータの範囲を指定
+    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+    batch_size = trial.suggest_int("batch_size", 16, 64, log=True)
+    epochs = trial.suggest_int("epochs", 15, 50)
+    resnet_type = trial.suggest_categorical("resnet_type", [18])
+    
+    args = parser.parse_args()
+    
+    # argparseの代わりに、上記のハイパーパラメータをargsに設定
+    # ここでは一部だけ変更しています。他の部分は固定の値やデフォルト値を使うことになります。
+    args.lr = lr
+    args.batch_size = batch_size
+    args.epochs = epochs
+    args.resnet_type = resnet_type
+
+    # main関数を呼び出して学習
+    model, device = main(args)
+    
+    # 精度を取得（ここでは簡単のため、すべてのエポックの平均精度を返すようにしていますが、最後のエポックの精度だけを返しても良い）
+    acc_dict, acc_all = eval_domain_classification(model, device, args.domain_list)
+    return acc_all
+
         
     
 if __name__ == "__main__":
@@ -88,7 +115,6 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size_test', default=100, type=int)
     parser.add_argument('--output_dir', type=str, default=str)
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--noise', type=str, default=None)
     parser.add_argument('--severity', type=int, default=1)
     parser.add_argument('--interval', type=int, default=5)
     parser.add_argument('--data_root', type=str, default='/home/yoda/data/')
@@ -99,3 +125,20 @@ if __name__ == "__main__":
     utils.fix_seed(args.seed)
     
     main(args)
+    
+    # study = optuna.create_study(direction="maximize")
+    # study.optimize(objective, n_trials=100)
+
+    # best_params = study.best_params
+
+    # with open("best_params.txt", "w") as f:
+    #     for param, value in best_params.items():
+    #         f.write(f"{param}: {value}\n")
+            
+    # with open("all_trials.txt", "w") as f:
+    #     for trial in study.trials:
+    #         f.write(f"Trial {trial.number}\n")
+    #         for param, value in trial.params.items():
+    #             f.write(f"{param}: {value}\n")
+    #         f.write(f"Value: {trial.value}\n\n")
+
