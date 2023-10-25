@@ -5,14 +5,15 @@ python3 panda_disentangle.py \
     --resnet_type 18 \
     --output_dir train_results \
     --seed 42 \
-    --severity 1 \
+    --severity 5 \
     --interval 10 \
     --data_root ~/data\
-    --domain clean-gaussian_noise \
-    --batch_size 16 \
+    --domain clean-fog \
+    --batch_size 32 \
     --alpha 1 \
     --beta 1 \
-    --lr 1e-3 \
-    --optuna \
-    --n_trials 30 \
+    --panda \
+    --disentangle
+    # --optuna \
+    # --n_trials 30 \
     # --ewc 

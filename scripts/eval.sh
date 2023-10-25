@@ -5,7 +5,7 @@ model_path=$2
 feature_path=$3
 shift 3
 
-eval_domain="clean-gaussian_noise"
+eval_domain="clean-fog"
 id_class=0
 
 # 関数定義

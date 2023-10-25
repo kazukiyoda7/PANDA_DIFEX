@@ -21,21 +21,24 @@ from torch.utils.tensorboard import SummaryWriter
 
 import optuna
 
-def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_loss):
+def train_model(model, model_ds, model_bc, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    model_dz.eval()
+    model_ds.eval()
     # auc, feature_space = get_score(model, device, train_loader, test_loader, args.domain_list)
     auc_mix, feature_space = get_score_in_mix_domain(model, device, train_loader, args.domain_list, args)
     print('Epoch: {}, AUROC is: {}'.format(0, auc_mix))
     params_model = list(model.parameters())
-    params_model_dz = list(model_dz.parameters())
-    # optimizer = optim.SGD(params_model_dz, lr=args.lr, weight_decay=0.00005, momentum=0.9)
-    # optimizer = optim.SGD(params_model+params_model_dz, lr=args.lr, weight_decay=0.00005, momentum=0.9)
-    optimizer = optim.Adam(params_model+params_model_dz, lr=args.lr, weight_decay=0.00005)
+    params_model_ds = list(model_ds.parameters())
+    params_model_bc = list(model_bc.parameters())
+    # optimizer = optim.SGD(params_model_ds, lr=args.lr, weight_decay=0.00005, momentum=0.9)
+    optimizer = optim.SGD(params_model, lr=args.lr, weight_decay=0.00005, momentum=0.9)
+    # optimizer = optim.SGD(params_model+params_model_ds, lr=args.lr, weight_decay=0.00005, momentum=0.9)
+    # optimizer = optim.Adam(params_model+params_model_ds+params_model_bc, lr=args.lr, weight_decay=0.00005)
     center = torch.FloatTensor(feature_space).mean(dim=0) # 5000*512
     criterion = CompactnessLoss(center.to(device)) # 512
     criterion_ds = torch.nn.CrossEntropyLoss()
     criteiron_disentangle = torch.nn.CosineSimilarity(dim=1)
+    criterion_bc = torch.nn.BCELoss()
     model_save_dir = osp.join(args.output_dir, 'model')
     feature_save_dir = osp.join(args.output_dir, 'feature')
     loss_save_dir = osp.join(args.output_dir, 'loss')
@@ -48,7 +51,7 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
     if not osp.exists(loss_save_dir):
         os.makedirs(loss_save_dir)
     for epoch in range(args.epochs):
-        running_loss, running_loss_dict, running_domain_loss, running_disentangle_loss = run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, criteiron_disentangle, device, args.ewc, ewc_loss, args.domain_list)
+        running_loss, running_loss_dict, running_domain_loss, running_disentangle_loss = run_epoch(model, model_ds, model_bc, train_loader, optimizer, criterion, criterion_ds, criteiron_disentangle, device, args.ewc, ewc_loss, args.domain_list)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
         print(running_loss_dict)
         print('domain_loss:', running_domain_loss)
@@ -59,7 +62,8 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc_mix))
         
         # domain classificationの精度を計算
-        acc_dict, all_acc = eval_domain_classification(model_dz, device, args.domain_list)
+        if len(args.domain_list) > 1:
+            acc_dict, all_acc = eval_domain_classification(model_ds, device, args.domain_list)
         print(acc_dict, all_acc)
         
         if auc_mix > best_auc:
@@ -84,7 +88,7 @@ def train_model(model, model_dz, train_loader, test_loader, device, args, ewc_lo
         
 
 
-def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds, criterion_disentangle, device, ewc, ewc_loss, domain_list):
+def run_epoch(model, model_ds, model_bc, train_loader, optimizer, criterion, criterion_ds, criterion_disentangle, device, ewc, ewc_loss, domain_list):
     running_loss = 0.0
     running_loss_dict = {}
     running_domain_loss = 0.0
@@ -123,14 +127,14 @@ def run_epoch(model, model_dz, train_loader, optimizer, criterion, criterion_ds,
         loss = sum(loss_dict.values())
         
         if len(domain_list) > 1:
-            features_ds, logits_ds = model_dz(images)
+            features_ds, logits_ds = model_ds(images)
             loss_ds = criterion_ds(logits_ds, labels)
             running_domain_loss += loss_ds.item()*args.alpha
             loss += loss_ds
 
-        loss_disentangle = criterion_disentangle(features, features_ds).mean()*args.beta
-        runnig_disentangle_loss += loss_disentangle.item()
-        loss += loss_disentangle
+            loss_disentangle = criterion_disentangle(features, features_ds).mean()*args.beta
+            runnig_disentangle_loss += loss_disentangle.item()
+            loss += loss_disentangle
 
         if ewc:
             loss += ewc_loss(model)
@@ -297,6 +301,10 @@ def main(args):
     model_ds = utils.get_resnet_model(resnet_type=args.resnet_type, pretrained=False)
     model_ds.fc = torch.nn.Linear(model_ds.fc.in_features, len(args.domain_list))
     model_ds = model_ds.to(device)
+    
+    model_bc = utils.get_resnet_model(resnet_type=args.resnet_type, pretrained=False)
+    model_bc.fc = torch.nn.Linear(model_bc.fc.in_features, len(args.domain_list))
+    model_bc = model_bc.to(device)
 
     ewc_loss = None
 
@@ -311,7 +319,7 @@ def main(args):
         ewc_loss = EWCLoss(frozen_model, fisher)
         
     utils.freeze_parameters(model)
-    best_auc, all_acc = train_model(model, model_ds, train_loader, test_loader, device, args, ewc_loss)
+    best_auc, all_acc = train_model(model, model_ds, model_bc, train_loader, test_loader, device, args, ewc_loss)
     
     return best_auc, all_acc
     
