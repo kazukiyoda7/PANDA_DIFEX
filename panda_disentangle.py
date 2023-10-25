@@ -31,8 +31,8 @@ def train_model(model, model_ds, model_bc, train_loader, test_loader, device, ar
     params_model_ds = list(model_ds.parameters())
     params_model_bc = list(model_bc.parameters())
     # optimizer = optim.SGD(params_model_ds, lr=args.lr, weight_decay=0.00005, momentum=0.9)
-    optimizer = optim.SGD(params_model, lr=args.lr, weight_decay=0.00005, momentum=0.9)
-    # optimizer = optim.SGD(params_model+params_model_ds, lr=args.lr, weight_decay=0.00005, momentum=0.9)
+    # optimizer = optim.SGD(params_model, lr=args.lr, weight_decay=0.00005, momentum=0.9)
+    optimizer = optim.SGD(params_model+params_model_ds, lr=args.lr, weight_decay=0.00005, momentum=0.9)
     # optimizer = optim.Adam(params_model+params_model_ds+params_model_bc, lr=args.lr, weight_decay=0.00005)
     center = torch.FloatTensor(feature_space).mean(dim=0) # 5000*512
     criterion = CompactnessLoss(center.to(device)) # 512
@@ -123,18 +123,18 @@ def run_epoch(model, model_ds, model_bc, train_loader, optimizer, criterion, cri
             features_in_domain = features[num_per_class*j:num_per_class*(j+1)]
             loss_dict[domain] += criterion(features_in_domain)
             
-            
         loss = sum(loss_dict.values())
         
-        if len(domain_list) > 1:
-            features_ds, logits_ds = model_ds(images)
-            loss_ds = criterion_ds(logits_ds, labels)
-            running_domain_loss += loss_ds.item()*args.alpha
-            loss += loss_ds
+        if args.disentangle:
+            if len(domain_list) > 1:
+                features_ds, logits_ds = model_ds(images)
+                loss_ds = criterion_ds(logits_ds, labels)
+                running_domain_loss += loss_ds.item()*args.alpha
+                loss += loss_ds
 
-            loss_disentangle = criterion_disentangle(features, features_ds).mean()*args.beta
-            running_disentangle_loss += loss_disentangle.item()
-            loss += loss_disentangle
+                loss_disentangle = criterion_disentangle(features, features_ds).mean()*args.beta
+                running_disentangle_loss += loss_disentangle.item()
+                loss += loss_disentangle
 
         if ewc:
             loss += ewc_loss(model)
@@ -152,8 +152,8 @@ def run_epoch(model, model_ds, model_bc, train_loader, optimizer, criterion, cri
             running_loss_dict[domain] += loss_dict[domain].item()
             
     for domain in domain_list:
-        running_loss_dict[domain] /= i + 1
-    return running_loss / (i + 1), running_loss_dict, running_domain_loss / (i + 1), runnig_disentangle_loss / (i + 1)
+        running_loss_dict[domain] /= len(train_loader)
+    return running_loss / len(train_loader), running_loss_dict, running_domain_loss / len(train_loader), running_disentangle_loss / len(train_loader)
 
 
 def get_score(model, device, train_loader, test_loader, domain_list):
@@ -370,6 +370,8 @@ if __name__ == "__main__":
     parser.add_argument('--optuna', action='store_true')
     parser.add_argument('--optuna_dir', type=str, default='optuna_results')
     parser.add_argument('--n_trials', type=int, default=10)
+    parser.add_argument('--panda', action='store_true')
+    parser.add_argument('--disentangle', action='store_true')
     
     args = parser.parse_args()
     
