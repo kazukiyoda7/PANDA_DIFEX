@@ -92,7 +92,7 @@ def run_epoch(model, model_ds, model_bc, train_loader, optimizer, criterion, cri
     running_loss = 0.0
     running_loss_dict = {}
     running_domain_loss = 0.0
-    runnig_disentangle_loss = 0.0
+    running_disentangle_loss = 0.0
     
     for domain in domain_list:
         running_loss_dict[domain] = 0.0
@@ -119,8 +119,8 @@ def run_epoch(model, model_ds, model_bc, train_loader, optimizer, criterion, cri
         features, logits = model(images)
         
         num_per_class = features.shape[0]//len(domain_list)
-        for i, domain in enumerate(domain_list):
-            features_in_domain = features[num_per_class*i:num_per_class*(i+1)]
+        for j, domain in enumerate(domain_list):
+            features_in_domain = features[num_per_class*j:num_per_class*(j+1)]
             loss_dict[domain] += criterion(features_in_domain)
             
             
@@ -133,12 +133,13 @@ def run_epoch(model, model_ds, model_bc, train_loader, optimizer, criterion, cri
             loss += loss_ds
 
             loss_disentangle = criterion_disentangle(features, features_ds).mean()*args.beta
-            runnig_disentangle_loss += loss_disentangle.item()
+            running_disentangle_loss += loss_disentangle.item()
             loss += loss_disentangle
 
         if ewc:
             loss += ewc_loss(model)
-
+            
+    
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1e-3)
