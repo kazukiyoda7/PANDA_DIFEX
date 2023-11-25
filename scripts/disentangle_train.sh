@@ -8,11 +8,10 @@ python3 panda_disentangle.py \
     --severity 5 \
     --interval 10 \
     --data_root ~/data\
-    --domain clean-fog \
+    --domain clean-gaussian_noise \
     --batch_size 32 \
-    --alpha 1 \
+    --alpha 2 \
     --beta 1 \
-    --panda \
     --disentangle
     # --optuna \
     # --n_trials 30 \

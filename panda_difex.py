@@ -241,12 +241,12 @@ def get_score_fourier(model, device, train_loader, test_loader, domain_list):
         for img_dict in tqdm(train_loader, desc='Fourier Train set featire extracting'):
             img_list = []
             for domain in domain_list:
-                img_list.append(img_dict[domain])     
+                img_list.append(img_dict[domain][0])
             imgs = torch.cat(img_list, dim=0)
-
             imgs = imgs.to(device)
+            print(imgs.shape)
             imgs = torch.angle(torch.fft.fftn(imgs, dim=(2, 3)))
-            features, _ = model(imgs)
+            features = model(imgs)
             train_feature_space.append(features)
         train_feature_space = (torch.cat(train_feature_space, dim=0)).contiguous().cpu().numpy()
     test_feature_space = []

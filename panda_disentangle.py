@@ -128,10 +128,11 @@ def run_epoch(model, model_ds, model_bc, train_loader, optimizer, criterion, cri
         if args.disentangle:
             if len(domain_list) > 1:
                 features_ds, logits_ds = model_ds(images)
-                loss_ds = criterion_ds(logits_ds, labels)
-                running_domain_loss += loss_ds.item()*args.alpha
+                loss_ds = criterion_ds(logits_ds, labels).mean()*args.alpha
+                running_domain_loss += loss_ds.item()
                 loss += loss_ds
-
+                
+                print(criterion_disentangle(features, features_ds).shape)
                 loss_disentangle = criterion_disentangle(features, features_ds).mean()*args.beta
                 running_disentangle_loss += loss_disentangle.item()
                 loss += loss_disentangle

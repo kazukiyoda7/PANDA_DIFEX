@@ -9,9 +9,9 @@ python3 panda_difex.py \
     --severity 5 \
     --interval 10 \
     --lr_fourier 1e-4 \
-    --alpha 0 \
-    --beta 0 \
-    --theta 0 \
-    --epochs_fourier 1\
+    --alpha 0.1 \
+    --beta 0.1 \
+    --theta 0.1 \
+    --epochs_fourier 10\
     --data_root ~/data \
     --domain 'clean-gaussian_noise'\
